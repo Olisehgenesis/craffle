@@ -44,7 +44,7 @@ export default function RaffleContent({ contractAddress, title }: RaffleContentP
   // Wagmi hooks - ALWAYS call these in the same order
   const { isConnected, address, chainId } = useAccount();
   const { connect, connectors } = useConnect();
-  const { disconnect } = useDisconnect();
+
   const { switchChain } = useSwitchChain();
   
   // Use the raffle hook
@@ -210,41 +210,52 @@ export default function RaffleContent({ contractAddress, title }: RaffleContentP
         // Buy by ticket count
         const count = parseInt(ticketAmount);
         if (!isNaN(count) && count > 0) {
-          await raffle.buyTickets(count);
+          const tx = await raffle.buyTickets(count);
+          if (tx !== null) {
+            setShowConfirmModal(false);
+            setTicketAmount('1');
+            setEthAmount('');
+            
+            // Reset user tickets check to force re-checking after purchase
+            lastUserTicketsCheck.current = '';
+            
+            // Wait for transaction to be mined
+            const receipt = await raffle.publicClient?.waitForTransactionReceipt({ hash: tx as unknown as `0x${string}` });
+            if (receipt?.status === 'success') {
+              // Reload the page after successful transaction
+              window.location.reload();
+            }
+          }
         } else {
           throw new Error("Invalid ticket count");
         }
       } else {
         // Buy by ETH amount
         if (ethAmount && parseFloat(ethAmount) > 0) {
-          await raffle.buyTicketsWithEth(ethAmount);
+          const tx = await raffle.buyTicketsWithEth(ethAmount);
+          if (tx !== null) {
+            setShowConfirmModal(false);
+            setTicketAmount('1');
+            setEthAmount('');
+            
+            // Reset user tickets check to force re-checking after purchase
+            lastUserTicketsCheck.current = '';
+            
+            // Wait for transaction to be mined
+            const receipt = await raffle.publicClient?.waitForTransactionReceipt({ hash: tx as unknown as `0x${string}` });
+            if (receipt?.status === 'success') {
+              // Reload the page after successful transaction
+              window.location.reload();
+            }
+          }
         } else {
           throw new Error("Invalid CELO amount");
         }
       }
-      
-      setShowConfirmModal(false);
-      setTicketAmount('1');
-      setEthAmount('');
-      
-      // Reset user tickets check to force re-checking after purchase
-      lastUserTicketsCheck.current = '';
-      
-      // Small delay to allow transaction to be processed, then refresh
-      setTimeout(() => {
-        if (address && raffle.raffleInfo?.raffleId) {
-          raffle.getUserTickets().then(tickets => {
-            if (mountedRef.current) {
-              setUserTickets(tickets);
-            }
-          }).catch(console.error);
-        }
-      }, 2000);
-      
     } catch (error) {
       console.error('Error buying tickets:', error);
     }
-  }, [raffle.buyTickets, raffle.buyTicketsWithEth, showTickets, ticketAmount, ethAmount, address, raffle.raffleInfo?.raffleId, raffle.getUserTickets]);
+  }, [raffle.buyTickets, raffle.buyTicketsWithEth, showTickets, ticketAmount, ethAmount, raffle.publicClient]);
 
   // Handle claim winnings action - stabilized
   const handleClaimWinnings = useCallback(() => {
@@ -575,15 +586,6 @@ export default function RaffleContent({ contractAddress, title }: RaffleContentP
                     </Button>
                   </motion.div>
                 )}
-
-                <motion.div whileTap={{ scale: 0.98 }}>
-                  <Button
-                    onClick={() => disconnect()}
-                    className="w-full bg-gray-700 hover:bg-gray-600 text-white font-medium py-3 rounded-2xl border-0"
-                  >
-                    Disconnect Wallet
-                  </Button>
-                </motion.div>
               </div>
 
               {/* Transaction status */}
@@ -678,7 +680,18 @@ export default function RaffleContent({ contractAddress, title }: RaffleContentP
                   </div>
                   <div>
                     <span className="text-gray-600">Time Left:</span>
-                    <div className="font-bold text-gray-900">{timeRemainingFormatted}</div>
+                    <div className="font-bold text-gray-900 flex items-center space-x-1">
+                      <Clock className="h-4 w-4 text-[#FCFF52]" />
+                      <motion.span
+                        key={timeRemainingFormatted}
+                        initial={{ scale: 1.2, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ duration: 0.3 }}
+                        className="text-[#FCFF52]"
+                      >
+                        {timeRemainingFormatted}
+                      </motion.span>
+                    </div>
                   </div>
                 </div>
               </div>

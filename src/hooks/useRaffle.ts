@@ -687,6 +687,8 @@ export function useRaffleContract({
     isWriteSuccess,
     isTxSuccess,
     writeError,
+
+    publicClient,
     fetchRaffleInfo,
     getDayRaffle,
     getTodayRaffle,
