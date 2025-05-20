@@ -66,17 +66,19 @@ export default function RaffleContent({ contractAddress, title }: RaffleContentP
   useEffect(() => {
     mountedRef.current = true;
     
+    
     // Call ready when the component is mounted and initial data is loaded
     const initializeApp = async () => {
       try {
         // Wait for initial data to load
+        await sdk.actions.ready();
         await Promise.all([
           raffle.fetchRaffleInfo(),
           // Add any other initial data loading here
         ]);
         
         // Call ready to dismiss the splash screen
-        await sdk.actions.ready();
+        
       } catch (error) {
         console.error('Error initializing app:', error);
         // Still call ready even if there's an error to ensure the splash screen is dismissed
