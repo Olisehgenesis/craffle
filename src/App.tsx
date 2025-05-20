@@ -7,6 +7,7 @@ import { formatEther } from "viem";
 import { celo } from "viem/chains";
 import { Button } from "./ui/Button";
 import { motion, AnimatePresence } from "framer-motion";
+import { sdk } from '@farcaster/frame-sdk';
 import {
   Trophy,
   Clock,
@@ -14,13 +15,13 @@ import {
   Ticket,
   RefreshCcw,
   Calendar,
-  AlertTriangle,
   Check,
   Wallet,
   TrendingUp,
   Users,
   X,
-  Zap
+  Zap,
+  AlertTriangle
 } from "lucide-react";
 import { useRaffleContract } from "./hooks/useRaffle";
 
@@ -64,10 +65,31 @@ export default function RaffleContent({ contractAddress, title }: RaffleContentP
   // Handle component mount/unmount
   useEffect(() => {
     mountedRef.current = true;
+    
+    // Call ready when the component is mounted and initial data is loaded
+    const initializeApp = async () => {
+      try {
+        // Wait for initial data to load
+        await Promise.all([
+          raffle.fetchRaffleInfo(),
+          // Add any other initial data loading here
+        ]);
+        
+        // Call ready to dismiss the splash screen
+        await sdk.actions.ready();
+      } catch (error) {
+        console.error('Error initializing app:', error);
+        // Still call ready even if there's an error to ensure the splash screen is dismissed
+        await sdk.actions.ready();
+      }
+    };
+    
+    initializeApp();
+    
     return () => {
       mountedRef.current = false;
     };
-  }, []);
+  }, [raffle.fetchRaffleInfo]);
 
   // Check if we need to switch to Celo chain - only run when connection status changes
   useEffect(() => {
