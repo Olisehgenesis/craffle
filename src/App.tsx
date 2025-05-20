@@ -20,7 +20,6 @@ import {
   TrendingUp,
   Users,
   X,
-  Timer,
   Zap
 } from "lucide-react";
 import { useRaffleContract } from "./hooks/useRaffle";

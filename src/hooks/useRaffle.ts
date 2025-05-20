@@ -7,7 +7,7 @@ import {
   useWaitForTransactionReceipt,
   useAccount
 } from 'wagmi';
-import { parseEther, formatEther } from 'viem';
+import { parseEther } from 'viem';
 import { raffleABI } from './abi';
 import { celo } from 'viem/chains';
 
@@ -86,6 +86,7 @@ export function useRaffleContract({
   } = useWaitForTransactionReceipt({
     hash: writeData,
   });
+  console.log(txReceipt);
   
   // State variables - use stable initial values
   const [isOwner, setIsOwner] = useState<boolean>(false);
