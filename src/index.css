@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+:root {
+  background-color: #f8f8f8;
+  color: #1E002B;
+  color-scheme: light;
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-synthesis: none;
+  font-weight: 400;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: linear-gradient(135deg, #FCF6F1 0%, #FCFF52 100%);
+  min-height: 100vh;
+  color: #1E002B;
+}
+
+/* Light theme variables matching your raffle design */
+:root {
+  --primary-bg: #FCF6F1;
+  --secondary-bg: #FCFF52;
+  --accent-yellow: #FCFF52;
+  --accent-orange: #FF9A51;
+  --text-primary: #1E002B;
+  --text-secondary: #655947;
+  --text-muted: #655947;
+  --border-color: #E7E3D4;
+  --success-color: #329F3B;
+  --error-color: #E70532;
+}
+
+/* Override any dark theme preferences */
+@media (prefers-color-scheme: dark) {
+  :root {
+    background-color: #f8f8f8;
+    color: #1E002B;
+  }
+  
+  body {
+    background: linear-gradient(135deg, #FCF6F1 0%, #FCFF52 100%);
+    color: #1E002B;
+  }
+}
+
+/* Ensure consistent light theme */
+* {
+  color-scheme: light;
+}
+
+/* Custom scrollbar to match theme */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #FCF6F1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #FCFF52;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #F8FF00;
+}
+
+/* Input and form styling to match theme */
+input, select, textarea {
+  background-color: #FCF6F1 !important;
+  border-color: #E7E3D4 !important;
+  color: #1E002B !important;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: #FCFF52 !important;
+  outline-color: #FCFF52 !important;
+}
+
+/* Button base styling */
+button {
+  transition: all 0.2s ease;
+}
+
+/* Loading spinner colors */
+.animate-spin {
+  border-color: #FCFF52 #E7E3D4 #E7E3D4 #E7E3D4;
+}
