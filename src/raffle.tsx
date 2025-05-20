@@ -2,7 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useMemo, useRef } from "react";
-import { useAccount, useDisconnect, useConnect, useSwitchChain } from "wagmi";
+import { useAccount, useConnect, useSwitchChain } from "wagmi";
 import { formatEther } from "viem";
 import { celo } from "viem/chains";
 import { Button } from "./ui/Button";
