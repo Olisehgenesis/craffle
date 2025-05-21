@@ -5,11 +5,16 @@ import { WagmiProvider } from "wagmi";
 
 import App from "./App.tsx";
 import { config } from "./wagmi.ts";
+import { celo } from "wagmi/chains";
+import { useSwitchChain } from "wagmi";
 
 import "./index.css";
 
 const queryClient = new QueryClient();
 
+// switch to celo
+const { switchChain } = useSwitchChain();
+switchChain({ chainId: celo.id });
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <WagmiProvider config={config}>

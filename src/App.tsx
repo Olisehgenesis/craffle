@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { useAccount, useConnect, useSwitchChain } from "wagmi";
 import { formatEther } from "viem";
-import { celo } from "viem/chains";
+import { celo } from "wagmi/chains";
 import { Button } from "./ui/Button";
 import { motion, AnimatePresence } from "framer-motion";
 import { sdk } from '@farcaster/frame-sdk';
@@ -49,7 +49,16 @@ export default function RaffleContent({ contractAddress, title }: RaffleContentP
   // Wagmi hooks - ALWAYS call these in the same order
   const { isConnected, address, chainId } = useAccount();
   const { connect, connectors } = useConnect();
-  const { switchChain } = useSwitchChain();
+  const {
+    switchChain,
+    error: switchChainError,
+    isError: isSwitchChainError,
+    isPending: isSwitchChainPending,
+  } = useSwitchChain();
+
+  console.log(isSwitchChainPending);
+  
+  
   
   // Use the raffle hook
   const raffle = useRaffleContract({ contractAddress });
@@ -119,6 +128,10 @@ export default function RaffleContent({ contractAddress, title }: RaffleContentP
     // Switch immediately on connection or if already connected with wrong chain
     if (isConnected) {
       switchToCelo();
+      //alert error
+      if (isSwitchChainError) {
+        console.error('Error switching chain:', switchChainError);
+      }
     }
   }, [isConnected, chainId, switchChain]);
 
@@ -418,10 +431,43 @@ export default function RaffleContent({ contractAddress, title }: RaffleContentP
       </div>
     );
   }
-  
+  const handleSwitchChain = () => {
+    switchChain({ chainId: 42220 });
+    console.log('Switching to Celo');
+    console.log(chainId);
+  }
+
   // Main content UI
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white">
+      {/* Network Warning Banner */}
+      {isConnected && chainId !== celo.id && (
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-red-500/10 border-b border-red-300/30 backdrop-blur-lg"
+        >
+          <div className="max-w-md mx-auto px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <AlertTriangle className="h-5 w-5 text-red-400" />
+                <div>
+                  <p className="text-sm font-medium text-red-400">Wrong Network</p>
+                  <p className="text-xs text-red-300">Please switch to Celo to continue</p>
+                </div>
+              </div>
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => handleSwitchChain()}
+                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-xl transition-colors"
+              >
+                Switch to Celo
+              </motion.button>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Mobile-optimized header */}
       <div className="sticky top-0 z-10 bg-gray-900/80 backdrop-blur-lg border-b border-gray-700">
         <div className="max-w-md mx-auto px-4 py-3">
@@ -439,6 +485,14 @@ export default function RaffleContent({ contractAddress, title }: RaffleContentP
             </div>
             
             <div className="flex items-center space-x-2">
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => switchChain({ chainId: celo.id })}
+                className="px-3 py-1.5 bg-gradient-to-r from-[#FCFF52] to-[#FFE033] text-gray-900 text-xs font-medium rounded-xl hover:from-[#FFE033] hover:to-[#FCFF52] transition-all"
+              >
+                Switch to Celo
+              </motion.button>
+
               <motion.button
                 whileTap={{ scale: 0.9 }}
                 onClick={handleShowStats}
