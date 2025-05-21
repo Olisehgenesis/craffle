@@ -492,7 +492,7 @@ export default function RaffleContent({ contractAddress, title }: RaffleContentP
 
                   {/* Wallet info */}
                   <div className="bg-gray-50 rounded-2xl p-4">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center space-x-3">
                         <div className="w-3 h-3 bg-green-500 rounded-full"></div>
                         <span className="text-sm font-medium text-gray-900">Connected</span>
@@ -500,6 +500,23 @@ export default function RaffleContent({ contractAddress, title }: RaffleContentP
                       <div className="bg-white px-3 py-1 rounded-full text-xs font-mono text-gray-600 border">
                         {truncateAddress(address || '')}
                       </div>
+                    </div>
+                    
+                    {/* Network info and switch button */}
+                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
+                      <div className="flex items-center space-x-2">
+                        <div className={`w-3 h-3 rounded-full ${chainId === celo.id ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+                        <span className="text-sm text-gray-600">
+                          {chainId === celo.id ? 'Celo Network' : 'Wrong Network'}
+                        </span>
+                      </div>
+                      <motion.button
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => switchChain({ chainId: celo.id })}
+                        className="px-3 py-1 bg-gradient-to-r from-[#FCFF52] to-[#FFE033] text-gray-900 text-xs font-medium rounded-xl hover:from-[#FFE033] hover:to-[#FCFF52] transition-all"
+                      >
+                        Switch to Celo
+                      </motion.button>
                     </div>
                   </div>
 
