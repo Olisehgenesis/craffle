@@ -124,7 +124,8 @@ export default function RaffleContent({ contractAddress, title }: RaffleContentP
     const loadUserTickets = async () => {
       console.log('[App] Loading user tickets for:', checkKey);
       try {
-        const tickets = await raffle.getUserTickets();
+        if (!raffle.raffleInfo) return;
+        const tickets = await raffle.getUserTickets(raffle.raffleInfo.raffleId);
         console.log('[App] User tickets loaded:', tickets);
         if (mountedRef.current) {
           setUserTickets(tickets);
@@ -174,7 +175,10 @@ export default function RaffleContent({ contractAddress, title }: RaffleContentP
       
       if (raffle.raffleInfo?.completed) {
         console.log('[App] Current raffle completed, checking for new raffle');
-        await raffle.checkAndCreateNewRaffle();
+        // Optionally, you can call a valid method here or just fetchRaffleInfo
+        // await raffle.createNewRaffle?.(); // Uncomment if such a method exists
+        // Otherwise, just fetch the latest raffle info
+        await raffle.fetchRaffleInfo();
       }
       
       console.log('[App] Fetching raffle info');
@@ -183,7 +187,7 @@ export default function RaffleContent({ contractAddress, title }: RaffleContentP
       // Load user tickets after raffle info is refreshed
       if (address && raffle.raffleInfo?.raffleId) {
         console.log('[App] Refreshing user tickets');
-        const tickets = await raffle.getUserTickets();
+        const tickets = await raffle.getUserTickets(raffle.raffleInfo.raffleId);
         console.log('[App] New user tickets count:', tickets);
         if (mountedRef.current) {
           setUserTickets(tickets);
@@ -210,7 +214,10 @@ export default function RaffleContent({ contractAddress, title }: RaffleContentP
         // Buy by ticket count
         const count = parseInt(ticketAmount);
         if (!isNaN(count) && count > 0) {
-          const tx = await raffle.buyTickets(count);
+          if (!raffle.raffleInfo) {
+            throw new Error("Raffle info is not available");
+          }
+          const tx = await raffle.buyTickets(raffle.raffleInfo.raffleId, count);
           if (tx !== null) {
             setShowConfirmModal(false);
             setTicketAmount('1');
@@ -232,7 +239,10 @@ export default function RaffleContent({ contractAddress, title }: RaffleContentP
       } else {
         // Buy by ETH amount
         if (ethAmount && parseFloat(ethAmount) > 0) {
-          const tx = await raffle.buyTicketsWithEth(ethAmount);
+          if (!raffle.raffleInfo) {
+            throw new Error("Raffle info is not available");
+          }
+          const tx = await raffle.buyTicketsWithEth(raffle.raffleInfo.raffleId, ethAmount);
           if (tx !== null) {
             setShowConfirmModal(false);
             setTicketAmount('1');
