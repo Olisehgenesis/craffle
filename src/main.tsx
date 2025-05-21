@@ -14,7 +14,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <App contractAddress="0xF274C1bde9AA841613266ecaca651000D9fD4Be5" />
+        <App contractAddress="0x2cfE616062261927fCcC727333d6dD3D5880FDd1" />
       </QueryClientProvider>
     </WagmiProvider>
   </React.StrictMode>,

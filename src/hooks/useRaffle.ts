@@ -15,26 +15,50 @@ interface UseRaffleContractOptions {
   contractAddress?: `0x${string}`;
 }
 
-// Define RaffleInfo type for better type safety
+// Enhanced RaffleInfo type with new fields
 interface RaffleInfo {
   raffleId: number;
+  name: string;
   startTime: Date;
   endTime: Date;
   ticketPrice: bigint;
   totalTickets: number;
   prizePool: bigint;
   completed: boolean;
+  creator: string;
+  maxWinners: number;
   timeRemaining: number;
   dayNumber?: number;
   isActive?: boolean;
 }
 
-// Define RaffleStats type for batch queries
+// Enhanced RaffleStats type
 interface RaffleStats {
   raffleIds: number[];
   totalTicketsArray: number[];
   prizePoolsArray: bigint[];
   completedArray: boolean[];
+}
+
+// Active raffle info
+interface ActiveRaffle {
+  raffleId: number;
+  name: string;
+  endTime: Date;
+  totalTickets: number;
+  prizePool: bigint;
+}
+
+// Participant stats
+interface ParticipantStats {
+  totalTickets: number;
+  totalSpent: bigint;
+}
+
+// Search result interface
+interface RaffleSearchResult {
+  raffleIds: number[];
+  names: string[];
 }
 
 // Custom error class for raffle-specific errors
@@ -49,7 +73,7 @@ class RaffleError extends Error {
  * Enhanced hook for interacting with the DailyRaffle contract
  */
 export function useRaffleContract({ 
-  contractAddress = "0xF274C1bde9AA841613266ecaca651000D9fD4Be5",
+  contractAddress = "0x2cfE616062261927fCcC727333d6dD3D5880FDd1",
 }: UseRaffleContractOptions = {}) {
   // Refs to prevent effects from running unnecessarily
   const mountedRef = useRef<boolean>(true);
@@ -88,8 +112,9 @@ export function useRaffleContract({
   });
   console.log(txReceipt);
   
-  // State variables - use stable initial values
+  // State variables - enhanced with new fields
   const [isOwner, setIsOwner] = useState<boolean>(false);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [currentRaffleId, setCurrentRaffleId] = useState<number>(0);
@@ -100,6 +125,7 @@ export function useRaffleContract({
   const [currentDayNumber, setCurrentDayNumber] = useState<number>(0);
   const [deploymentTime, setDeploymentTime] = useState<number>(0);
   const [isAutoCheckingNewRaffle, setIsAutoCheckingNewRaffle] = useState<boolean>(false);
+  const [raffleCreationFee, setRaffleCreationFee] = useState<bigint>(BigInt(0));
 
   // Set up cleanup effect
   useEffect(() => {
@@ -126,7 +152,7 @@ export function useRaffleContract({
       
       try {
         // Fetch all initial data in parallel
-        const [deploymentTimeResult, currentDayResult] = await Promise.all([
+        const [deploymentTimeResult, currentDayResult, creationFeeResult] = await Promise.all([
           publicClient.readContract({
             address: contractAddress,
             abi: raffleABI,
@@ -136,12 +162,18 @@ export function useRaffleContract({
             address: contractAddress,
             abi: raffleABI,
             functionName: 'getCurrentDayNumber',
+          }) as Promise<bigint>,
+          publicClient.readContract({
+            address: contractAddress,
+            abi: raffleABI,
+            functionName: 'raffleCreationFee',
           }) as Promise<bigint>
         ]);
         
         if (mountedRef.current) {
           setDeploymentTime(Number(deploymentTimeResult));
           setCurrentDayNumber(Number(currentDayResult));
+          setRaffleCreationFee(creationFeeResult);
           
           // Fetch raffle info after basic contract info is loaded
           await fetchRaffleInfo();
@@ -161,30 +193,39 @@ export function useRaffleContract({
     initializeContract();
   }, [publicClient, contractAddress]);
 
-  // Check if user is owner - separate effect with stable dependencies
+  // Check if user is owner/admin - separate effect with stable dependencies
   useEffect(() => {
     if (!address || !publicClient || !isConnected) return;
     
-    const checkOwner = async () => {
+    const checkPermissions = async () => {
       try {
-        const ownerResult = await publicClient.readContract({
-          address: contractAddress,
-          abi: raffleABI,
-          functionName: 'owner',
-        });
+        const [ownerResult, adminResult] = await Promise.all([
+          publicClient.readContract({
+            address: contractAddress,
+            abi: raffleABI,
+            functionName: 'owner',
+          }) as Promise<`0x${string}`>,
+          publicClient.readContract({
+            address: contractAddress,
+            abi: raffleABI,
+            functionName: 'isAdmin',
+            args: [address],
+          }) as Promise<boolean>
+        ]);
         
         if (mountedRef.current) {
           setIsOwner(ownerResult === address);
+          setIsAdmin(adminResult);
         }
       } catch (err) {
-        console.error('[useRaffle] Error checking owner:', err);
+        console.error('[useRaffle] Error checking permissions:', err);
       }
     };
     
-    checkOwner();
+    checkPermissions();
   }, [address, contractAddress, publicClient, isConnected]);
 
-  // Fetch current raffle info - memoized with better error handling
+  // Fetch current raffle info - enhanced with new fields
   const fetchRaffleInfo = useCallback(async () => {
     if (!publicClient) {
       console.log('[useRaffle] Public client not available for fetch');
@@ -193,7 +234,7 @@ export function useRaffleContract({
     
     // Debounce fetch calls to prevent excessive requests
     const now = Date.now();
-    if (now - lastFetchTime.current < 3000) { // Increased debounce to 3 seconds
+    if (now - lastFetchTime.current < 3000) {
       console.log('[useRaffle] Skipping fetch due to debounce');
       return raffleInfo;
     }
@@ -225,13 +266,14 @@ export function useRaffleContract({
         setCurrentRaffleId(currentId);
       }
       
-      // Fetch raffle info and status in parallel
+      // Fetch enhanced raffle info using getRaffleInfo function
       const [result, isActive] = await Promise.all([
         publicClient.readContract({
           address: contractAddress,
           abi: raffleABI,
-          functionName: 'getCurrentRaffleInfo',
-        }) as Promise<[bigint, bigint, bigint, bigint, bigint, bigint, boolean]>,
+          functionName: 'getRaffleInfo',
+          args: [BigInt(currentId)],
+        }) as Promise<[bigint, string, bigint, bigint, bigint, bigint, bigint, boolean, `0x${string}`, bigint, bigint]>,
         publicClient.readContract({
           address: contractAddress,
           abi: raffleABI,
@@ -241,20 +283,24 @@ export function useRaffleContract({
       
       const parsedInfo: RaffleInfo = {
         raffleId: Number(result[0]),
-        startTime: new Date(Number(result[1]) * 1000),
-        endTime: new Date(Number(result[2]) * 1000),
-        ticketPrice: result[3],
-        totalTickets: Number(result[4]),
-        prizePool: result[5],
-        completed: result[6],
-        timeRemaining: Math.max(0, Number(result[2]) - Math.floor(Date.now() / 1000)),
+        name: result[1],
+        startTime: new Date(Number(result[2]) * 1000),
+        endTime: new Date(Number(result[3]) * 1000),
+        ticketPrice: result[4],
+        totalTickets: Number(result[5]),
+        prizePool: result[6],
+        completed: result[7],
+        creator: result[8],
+        maxWinners: Number(result[9]),
+        timeRemaining: Math.max(0, Number(result[3]) - Math.floor(Date.now() / 1000)),
+        dayNumber: Number(result[10]),
         isActive
       };
       
       if (!mountedRef.current) return null;
       
       setRaffleInfo(parsedInfo);
-      setTicketPrice(result[3]);
+      setTicketPrice(result[4]);
       setTimeRemaining(parsedInfo.timeRemaining);
       
       // Fetch winners if the raffle is completed
@@ -272,10 +318,8 @@ export function useRaffleContract({
           }
         } catch (winnersError) {
           console.error('[useRaffle] Error fetching winners:', winnersError);
-          // Don't fail the entire fetch if winners fail
         }
       } else {
-        // Clear winners if raffle is not completed
         if (mountedRef.current) {
           setWinners([]);
         }
@@ -296,7 +340,7 @@ export function useRaffleContract({
     }
   }, [contractAddress, publicClient, raffleInfo]);
 
-  // Auto-check for new raffles - improved with better timing
+  // Auto-check for new raffles
   useEffect(() => {
     if (!publicClient || !isInitialized.current) {
       console.log('[useRaffle] Auto-check disabled - not ready');
@@ -304,7 +348,6 @@ export function useRaffleContract({
     }
     
     const checkForNewRaffle = async () => {
-      // Prevent concurrent checks using ref instead of state
       if (isCheckingRef.current) {
         console.log('[useRaffle] Skipping auto-check - already in progress');
         return;
@@ -315,17 +358,15 @@ export function useRaffleContract({
         isCheckingRef.current = true;
         setIsAutoCheckingNewRaffle(true);
         
-        const newRaffleCreated = await publicClient.readContract({
+        // Just check if current raffle is still active
+        const isActive = await publicClient.readContract({
           address: contractAddress,
           abi: raffleABI,
-          functionName: 'checkAndCreateNewRaffle',
+          functionName: 'isCurrentRaffleActive',
         }) as boolean;
         
-        console.log('[useRaffle] Auto-check result:', newRaffleCreated);
-        
-        if (newRaffleCreated && mountedRef.current) {
-          console.log('[useRaffle] New raffle created, refreshing info');
-          // Force refresh raffle info
+        if (!isActive && raffleInfo && !raffleInfo.completed && mountedRef.current) {
+          console.log('[useRaffle] Current raffle ended, refreshing info');
           lastRaffleId.current = null;
           lastFetchTime.current = 0;
           await fetchRaffleInfo();
@@ -340,30 +381,23 @@ export function useRaffleContract({
       }
     };
     
-    // Check immediately
     checkForNewRaffle();
-    
-    // Set up interval to check every 5 minutes (increased from 2 minutes)
     const intervalId = setInterval(checkForNewRaffle, 300000);
-    
-    // Store interval ID in ref for cleanup
     autoCheckInterval.current = intervalId;
     
     return () => {
-      // Clear interval
       if (autoCheckInterval.current) {
         clearInterval(autoCheckInterval.current);
         autoCheckInterval.current = undefined;
       }
-      // Reset checking state
       isCheckingRef.current = false;
       if (mountedRef.current) {
         setIsAutoCheckingNewRaffle(false);
       }
     };
-  }, [publicClient, contractAddress, fetchRaffleInfo]);
+  }, [publicClient, contractAddress, fetchRaffleInfo, raffleInfo]);
 
-  // Get raffle info for a specific day
+  // Get enhanced raffle info for a specific day
   const getDayRaffle = useCallback(async (dayNumber: number) => {
     if (!publicClient) {
       throw new RaffleError('Public client not available', 'CLIENT_ERROR');
@@ -375,17 +409,20 @@ export function useRaffleContract({
         abi: raffleABI,
         functionName: 'getDayRaffle',
         args: [BigInt(dayNumber)],
-      }) as [bigint, bigint, bigint, bigint, bigint, bigint, boolean];
+      }) as [bigint, string, bigint, bigint, bigint, bigint, bigint, boolean, `0x${string}`, bigint];
       
       return {
         raffleId: Number(result[0]),
-        startTime: new Date(Number(result[1]) * 1000),
-        endTime: new Date(Number(result[2]) * 1000),
-        ticketPrice: result[3],
-        totalTickets: Number(result[4]),
-        prizePool: result[5],
-        completed: result[6],
-        timeRemaining: Math.max(0, Number(result[2]) - Math.floor(Date.now() / 1000)),
+        name: result[1],
+        startTime: new Date(Number(result[2]) * 1000),
+        endTime: new Date(Number(result[3]) * 1000),
+        ticketPrice: result[4],
+        totalTickets: Number(result[5]),
+        prizePool: result[6],
+        completed: result[7],
+        creator: result[8],
+        maxWinners: Number(result[9]),
+        timeRemaining: Math.max(0, Number(result[3]) - Math.floor(Date.now() / 1000)),
         dayNumber
       } as RaffleInfo;
     } catch (err) {
@@ -394,8 +431,8 @@ export function useRaffleContract({
     }
   }, [publicClient, contractAddress]);
 
-  // Get today's raffle
-  const getTodayRaffle = useCallback(async () => {
+  // Get raffle info by ID
+  const getRaffleInfo = useCallback(async (raffleId: number) => {
     if (!publicClient) {
       throw new RaffleError('Public client not available', 'CLIENT_ERROR');
     }
@@ -404,22 +441,27 @@ export function useRaffleContract({
       const result = await publicClient.readContract({
         address: contractAddress,
         abi: raffleABI,
-        functionName: 'getTodayRaffle',
-      }) as [bigint, bigint, bigint, bigint, bigint, bigint, boolean];
+        functionName: 'getRaffleInfo',
+        args: [BigInt(raffleId)],
+      }) as [bigint, string, bigint, bigint, bigint, bigint, bigint, boolean, `0x${string}`, bigint, bigint];
       
       return {
         raffleId: Number(result[0]),
-        startTime: new Date(Number(result[1]) * 1000),
-        endTime: new Date(Number(result[2]) * 1000),
-        ticketPrice: result[3],
-        totalTickets: Number(result[4]),
-        prizePool: result[5],
-        completed: result[6],
-        timeRemaining: Math.max(0, Number(result[2]) - Math.floor(Date.now() / 1000))
+        name: result[1],
+        startTime: new Date(Number(result[2]) * 1000),
+        endTime: new Date(Number(result[3]) * 1000),
+        ticketPrice: result[4],
+        totalTickets: Number(result[5]),
+        prizePool: result[6],
+        completed: result[7],
+        creator: result[8],
+        maxWinners: Number(result[9]),
+        timeRemaining: Math.max(0, Number(result[3]) - Math.floor(Date.now() / 1000)),
+        dayNumber: Number(result[10])
       } as RaffleInfo;
     } catch (err) {
-      console.error('Error fetching today raffle:', err);
-      throw new RaffleError('Failed to fetch today raffle info', 'TODAY_RAFFLE_ERROR');
+      console.error('Error fetching raffle info:', err);
+      throw new RaffleError('Failed to fetch raffle info', 'RAFFLE_INFO_ERROR');
     }
   }, [publicClient, contractAddress]);
 
@@ -449,6 +491,91 @@ export function useRaffleContract({
     }
   }, [publicClient, contractAddress]);
 
+  // Get all active raffles
+  const getActiveRaffles = useCallback(async () => {
+    if (!publicClient) {
+      throw new RaffleError('Public client not available', 'CLIENT_ERROR');
+    }
+    
+    try {
+      const activeRaffleIds = await publicClient.readContract({
+        address: contractAddress,
+        abi: raffleABI,
+        functionName: 'getActiveRaffles',
+      }) as bigint[];
+      
+      // Fetch details for each active raffle
+      const activeRaffles: ActiveRaffle[] = [];
+      for (const raffleId of activeRaffleIds) {
+        try {
+          const raffleInfo = await getRaffleInfo(Number(raffleId));
+          activeRaffles.push({
+            raffleId: raffleInfo.raffleId,
+            name: raffleInfo.name,
+            endTime: raffleInfo.endTime,
+            totalTickets: raffleInfo.totalTickets,
+            prizePool: raffleInfo.prizePool
+          });
+        } catch (err) {
+          console.error(`Error fetching details for raffle ${raffleId}:`, err);
+        }
+      }
+      
+      return activeRaffles;
+    } catch (err) {
+      console.error('Error fetching active raffles:', err);
+      throw new RaffleError('Failed to fetch active raffles', 'ACTIVE_RAFFLES_ERROR');
+    }
+  }, [publicClient, contractAddress, getRaffleInfo]);
+
+  // Get participant stats
+  const getParticipantStats = useCallback(async (participant: string) => {
+    if (!publicClient) {
+      throw new RaffleError('Public client not available', 'CLIENT_ERROR');
+    }
+    
+    try {
+      const result = await publicClient.readContract({
+        address: contractAddress,
+        abi: raffleABI,
+        functionName: 'getParticipantStats',
+        args: [participant as `0x${string}`],
+      }) as [bigint, bigint];
+      
+      return {
+        totalTickets: Number(result[0]),
+        totalSpent: result[1]
+      } as ParticipantStats;
+    } catch (err) {
+      console.error('Error fetching participant stats:', err);
+      throw new RaffleError('Failed to fetch participant stats', 'PARTICIPANT_STATS_ERROR');
+    }
+  }, [publicClient, contractAddress]);
+
+  // Search raffles by name
+  const searchRafflesByName = useCallback(async (searchTerm: string, maxResults: number = 10) => {
+    if (!publicClient) {
+      throw new RaffleError('Public client not available', 'CLIENT_ERROR');
+    }
+    
+    try {
+      const result = await publicClient.readContract({
+        address: contractAddress,
+        abi: raffleABI,
+        functionName: 'searchRafflesByName',
+        args: [searchTerm, BigInt(maxResults)],
+      }) as [bigint[], string[]];
+      
+      return {
+        raffleIds: result[0].map(id => Number(id)),
+        names: result[1]
+      } as RaffleSearchResult;
+    } catch (err) {
+      console.error('Error searching raffles by name:', err);
+      throw new RaffleError('Failed to search raffles', 'SEARCH_ERROR');
+    }
+  }, [publicClient, contractAddress]);
+
   // Check if raffle exists for a day
   const raffleExistsForDay = useCallback(async (dayNumber: number) => {
     if (!publicClient) {
@@ -470,8 +597,34 @@ export function useRaffleContract({
     }
   }, [publicClient, contractAddress]);
 
-  // Manually check and create new raffle
-  const checkAndCreateNewRaffle = useCallback(async () => {
+  // Check if participant has won a raffle
+  const hasParticipantWon = useCallback(async (raffleId: number, participant: string) => {
+    if (!publicClient) {
+      throw new RaffleError('Public client not available', 'CLIENT_ERROR');
+    }
+    
+    try {
+      const hasWon = await publicClient.readContract({
+        address: contractAddress,
+        abi: raffleABI,
+        functionName: 'hasParticipantWon',
+        args: [BigInt(raffleId), participant as `0x${string}`],
+      }) as boolean;
+      
+      return hasWon;
+    } catch (err) {
+      console.error('Error checking if participant won:', err);
+      throw new RaffleError('Failed to check win status', 'WIN_CHECK_ERROR');
+    }
+  }, [publicClient, contractAddress]);
+
+  // Create custom raffle
+  const createCustomRaffle = useCallback(async (
+    name: string, 
+    startTime: Date, 
+    endTime: Date, 
+    maxWinners: number
+  ) => {
     if (!walletClient || !address) {
       throw new RaffleError('Wallet not connected', 'WALLET_ERROR');
     }
@@ -480,18 +633,151 @@ export function useRaffleContract({
       const tx = await writeContract({
         address: contractAddress,
         abi: raffleABI,
-        functionName: 'checkAndCreateNewRaffle',
+        functionName: 'createCustomRaffle',
+        args: [
+          name,
+          BigInt(Math.floor(startTime.getTime() / 1000)),
+          BigInt(Math.floor(endTime.getTime() / 1000)),
+          BigInt(maxWinners)
+        ],
+        value: raffleCreationFee,
       });
       
       return tx;
     } catch (err) {
-      console.error('Error checking and creating new raffle:', err);
-      throw new RaffleError('Failed to check and create new raffle', 'CREATE_ERROR');
+      console.error('Error creating custom raffle:', err);
+      throw new RaffleError('Failed to create custom raffle', 'CREATE_RAFFLE_ERROR');
+    }
+  }, [walletClient, address, writeContract, contractAddress, raffleCreationFee]);
+
+  // Update raffle name
+  const updateRaffleName = useCallback(async (raffleId: number, newName: string) => {
+    if (!walletClient || !address) {
+      throw new RaffleError('Wallet not connected', 'WALLET_ERROR');
+    }
+    
+    try {
+      const tx = await writeContract({
+        address: contractAddress,
+        abi: raffleABI,
+        functionName: 'updateRaffleName',
+        args: [BigInt(raffleId), newName],
+      });
+      
+      return tx;
+    } catch (err) {
+      console.error('Error updating raffle name:', err);
+      throw new RaffleError('Failed to update raffle name', 'UPDATE_NAME_ERROR');
     }
   }, [walletClient, address, writeContract, contractAddress]);
 
-  // Complete current raffle
-  const completeRaffle = useCallback(async () => {
+  // Generate random winners (Admin only)
+  const generateRandomWinners = useCallback(async (raffleId: number) => {
+    if (!walletClient || !address) {
+      throw new RaffleError('Wallet not connected', 'WALLET_ERROR');
+    }
+    
+    try {
+      const tx = await writeContract({
+        address: contractAddress,
+        abi: raffleABI,
+        functionName: 'generateRandomWinners',
+        args: [BigInt(raffleId)],
+      });
+      
+      return tx;
+    } catch (err) {
+      console.error('Error generating random winners:', err);
+      throw new RaffleError('Failed to generate random winners', 'GENERATE_WINNERS_ERROR');
+    }
+  }, [walletClient, address, writeContract, contractAddress]);
+
+  // Set winners (Admin only)
+  const setWinnersAdmin = useCallback(async (raffleId: number, winners: string[]) => {
+    if (!walletClient || !address) {
+      throw new RaffleError('Wallet not connected', 'WALLET_ERROR');
+    }
+    
+    try {
+      const tx = await writeContract({
+        address: contractAddress,
+        abi: raffleABI,
+        functionName: 'setWinners',
+        args: [BigInt(raffleId), winners as `0x${string}`[]],
+      });
+      
+      return tx;
+    } catch (err) {
+      console.error('Error setting winners:', err);
+      throw new RaffleError('Failed to set winners', 'SET_WINNERS_ERROR');
+    }
+  }, [walletClient, address, writeContract, contractAddress]);
+
+  // Set winner count (Admin only)
+  const setWinnerCount = useCallback(async (raffleId: number, winnerCount: number) => {
+    if (!walletClient || !address) {
+      throw new RaffleError('Wallet not connected', 'WALLET_ERROR');
+    }
+    
+    try {
+      const tx = await writeContract({
+        address: contractAddress,
+        abi: raffleABI,
+        functionName: 'setWinnerCount',
+        args: [BigInt(raffleId), BigInt(winnerCount)],
+      });
+      
+      return tx;
+    } catch (err) {
+      console.error('Error setting winner count:', err);
+      throw new RaffleError('Failed to set winner count', 'SET_WINNER_COUNT_ERROR');
+    }
+  }, [walletClient, address, writeContract, contractAddress]);
+
+  // Add admin (Owner only)
+  const addAdmin = useCallback(async (adminAddress: string) => {
+    if (!walletClient || !address) {
+      throw new RaffleError('Wallet not connected', 'WALLET_ERROR');
+    }
+    
+    try {
+      const tx = await writeContract({
+        address: contractAddress,
+        abi: raffleABI,
+        functionName: 'addAdmin',
+        args: [adminAddress as `0x${string}`],
+      });
+      
+      return tx;
+    } catch (err) {
+      console.error('Error adding admin:', err);
+      throw new RaffleError('Failed to add admin', 'ADD_ADMIN_ERROR');
+    }
+  }, [walletClient, address, writeContract, contractAddress]);
+
+  // Remove admin (Owner only)
+  const removeAdmin = useCallback(async (adminAddress: string) => {
+    if (!walletClient || !address) {
+      throw new RaffleError('Wallet not connected', 'WALLET_ERROR');
+    }
+    
+    try {
+      const tx = await writeContract({
+        address: contractAddress,
+        abi: raffleABI,
+        functionName: 'removeAdmin',
+        args: [adminAddress as `0x${string}`],
+      });
+      
+      return tx;
+    } catch (err) {
+      console.error('Error removing admin:', err);
+      throw new RaffleError('Failed to remove admin', 'REMOVE_ADMIN_ERROR');
+    }
+  }, [walletClient, address, writeContract, contractAddress]);
+
+  // Complete raffle
+  const completeRaffle = useCallback(async (raffleId: number) => {
     if (!walletClient || !address) {
       throw new RaffleError('Wallet not connected', 'WALLET_ERROR');
     }
@@ -501,6 +787,7 @@ export function useRaffleContract({
         address: contractAddress,
         abi: raffleABI,
         functionName: 'completeRaffle',
+        args: [BigInt(raffleId)],
       });
       
       return tx;
@@ -510,7 +797,7 @@ export function useRaffleContract({
     }
   }, [walletClient, address, writeContract, contractAddress]);
 
-  // Timer effect for countdown - improved stability
+  // Timer effect for countdown
   useEffect(() => {
     if (!raffleInfo) return;
     
@@ -522,10 +809,9 @@ export function useRaffleContract({
         setTimeRemaining(remaining);
       }
       
-      // If raffle just ended and we have a completed status mismatch, refresh
       if (remaining === 0 && !raffleInfo.completed) {
         console.log('[useRaffle] Raffle time ended, refreshing info');
-        lastFetchTime.current = 0; // Reset debounce
+        lastFetchTime.current = 0;
         fetchRaffleInfo();
       }
     }, 1000);
@@ -533,179 +819,318 @@ export function useRaffleContract({
     return () => clearInterval(timer);
   }, [raffleInfo, fetchRaffleInfo]);
 
-  // Buy tickets with improved error handling
-  const buyTickets = useCallback(async (count: number) => {
-    if (!walletClient || !address) {
-      throw new RaffleError('Wallet not connected', 'WALLET_ERROR');
-    }
-    
-    if (count <= 0) {
-      throw new RaffleError('Invalid ticket count', 'INVALID_COUNT');
-    }
-    
-    try {
-      const totalCost = BigInt(count) * ticketPrice;
-      const tx = await writeContract({
-        address: contractAddress,
-        abi: raffleABI,
-        functionName: 'buyTickets',
-        args: [BigInt(count)],
-        value: totalCost,
-      });
-      return tx;
-    } catch (err) {
-      console.error('Error buying tickets:', err);
-      throw new RaffleError('Failed to buy tickets', 'BUY_TICKETS_ERROR');
-    }
-  }, [walletClient, address, writeContract, contractAddress, ticketPrice]);
+  // Buy tickets for specific raffle
+ // Buy tickets for specific raffle
+const buyTickets = useCallback(async (raffleId: number, count: number) => {
+  if (!walletClient || !address) {
+    throw new RaffleError('Wallet not connected', 'WALLET_ERROR');
+  }
+  
+  if (count <= 0) {
+    throw new RaffleError('Invalid ticket count', 'INVALID_COUNT');
+  }
+  
+  try {
+    const totalCost = BigInt(count) * ticketPrice;
+    const tx = await writeContract({
+      address: contractAddress,
+      abi: raffleABI,
+      functionName: 'buyTickets',
+      args: [BigInt(raffleId), BigInt(count)],
+      value: totalCost,
+    });
+    return tx;
+  } catch (err) {
+    console.error('Error buying tickets:', err);
+    throw new RaffleError('Failed to buy tickets', 'BUY_TICKETS_ERROR');
+  }
+}, [walletClient, address, writeContract, contractAddress, ticketPrice]);
 
-  // Withdraw funds with improved error handling
-  const withdrawFunds = useCallback(async () => {
-    if (!walletClient || !address) {
-      throw new RaffleError('Wallet not connected', 'WALLET_ERROR');
-    }
-    
-    try {
-      const tx = await writeContract({
-        address: contractAddress,
-        abi: raffleABI,
-        functionName: 'withdrawFunds',
-      });
-      return tx;
-    } catch (err) {
-      console.error('Error withdrawing funds:', err);
-      throw new RaffleError('Failed to withdraw funds', 'WITHDRAW_ERROR');
-    }
-  }, [walletClient, address, writeContract, contractAddress]);
+// Buy tickets with ETH amount for specific raffle
+const buyTicketsWithEth = useCallback(async (raffleId: number, ethAmount: string) => {
+  if (!walletClient || !address) {
+    throw new RaffleError('Wallet not connected', 'WALLET_ERROR');
+  }
+  
+  const amount = parseEther(ethAmount);
+  if (amount <= BigInt(0)) {
+    throw new RaffleError('Invalid ETH amount', 'INVALID_AMOUNT');
+  }
+  
+  try {
+    const tx = await writeContract({
+      address: contractAddress,
+      abi: raffleABI,
+      functionName: 'buyTicketsWithEth',
+      args: [BigInt(raffleId)],
+      value: amount,
+    });
+    return tx;
+  } catch (err) {
+    console.error('Error buying tickets with ETH:', err);
+    throw new RaffleError('Failed to buy tickets with ETH', 'BUY_TICKETS_ERROR');
+  }
+}, [walletClient, address, writeContract, contractAddress]);
 
-  // Reset error state
-  const resetError = useCallback(() => {
-    if (mountedRef.current) {
-      setError(null);
-    }
-  }, []);
-
-  // Reset write state
-  const resetWriteState = useCallback(() => {
-    if (mountedRef.current) {
-      resetWrite();
-    }
-  }, [resetWrite]);
-
-  // Format time remaining into a human-readable string
-  const formatTimeRemaining = useCallback((seconds: number) => {
-    if (seconds <= 0) return 'Ended';
+// Emergency withdraw (Owner only)
+const emergencyWithdraw = useCallback(async () => {
+  if (!walletClient || !address) {
+    throw new RaffleError('Wallet not connected', 'WALLET_ERROR');
+  }
+  
+  try {
+    const tx = await writeContract({
+      address: contractAddress,
+      abi: raffleABI,
+      functionName: 'emergencyWithdraw',
+    });
     
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const remainingSeconds = seconds % 60;
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m ${remainingSeconds}s`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${remainingSeconds}s`;
-    } else {
-      return `${remainingSeconds}s`;
-    }
-  }, []);
+    return tx;
+  } catch (err) {
+    console.error('Error withdrawing funds:', err);
+    throw new RaffleError('Failed to withdraw funds', 'WITHDRAW_ERROR');
+  }
+}, [walletClient, address, writeContract, contractAddress]);
 
-  // Get user's tickets for current raffle
-  const getUserTickets = useCallback(async () => {
-    if (!publicClient || !address || !raffleInfo?.raffleId) {
-      return 0;
-    }
+// Get user's tickets for any raffle
+const getUserTickets = useCallback(async (raffleId: number, userAddress?: string) => {
+  if (!publicClient) {
+    return 0;
+  }
+  
+  const targetAddress = userAddress || address;
+  if (!targetAddress) {
+    return 0;
+  }
+  
+  try {
+    const tickets = await publicClient.readContract({
+      address: contractAddress,
+      abi: raffleABI,
+      functionName: 'getUserTickets',
+      args: [targetAddress as `0x${string}`, BigInt(raffleId)],
+    }) as bigint;
     
-    try {
-      const tickets = await publicClient.readContract({
-        address: contractAddress,
-        abi: raffleABI,
-        functionName: 'getTicketsPurchased',
-        args: [BigInt(raffleInfo.raffleId), address],
-      }) as bigint;
-      
-      return Number(tickets);
-    } catch (err) {
-      console.error('Error getting user tickets:', err);
-      return 0;
-    }
-  }, [publicClient, address, raffleInfo?.raffleId, contractAddress]);
+    return Number(tickets);
+  } catch (err) {
+    console.error('Error getting user tickets:', err);
+    return 0;
+  }
+}, [publicClient, address, contractAddress]);
 
-  // Buy tickets with ETH amount
-  const buyTicketsWithEth = useCallback(async (ethAmount: string) => {
-    if (!walletClient || !address) {
-      throw new RaffleError('Wallet not connected', 'WALLET_ERROR');
-    }
+// Get participants for a raffle
+const getParticipants = useCallback(async (raffleId: number) => {
+  if (!publicClient) {
+    throw new RaffleError('Public client not available', 'CLIENT_ERROR');
+  }
+  
+  try {
+    const participants = await publicClient.readContract({
+      address: contractAddress,
+      abi: raffleABI,
+      functionName: 'getParticipants',
+      args: [BigInt(raffleId)],
+    }) as `0x${string}`[];
     
+    return participants;
+  } catch (err) {
+    console.error('Error getting participants:', err);
+    throw new RaffleError('Failed to get participants', 'PARTICIPANTS_ERROR');
+  }
+}, [publicClient, contractAddress]);
+
+// Get winners for a raffle
+const getWinners = useCallback(async (raffleId: number) => {
+  if (!publicClient) {
+    throw new RaffleError('Public client not available', 'CLIENT_ERROR');
+  }
+  
+  try {
+    const winners = await publicClient.readContract({
+      address: contractAddress,
+      abi: raffleABI,
+      functionName: 'getWinners',
+      args: [BigInt(raffleId)],
+    }) as `0x${string}`[];
+    
+    return winners;
+  } catch (err) {
+    console.error('Error getting winners:', err);
+    throw new RaffleError('Failed to get winners', 'WINNERS_ERROR');
+  }
+}, [publicClient, contractAddress]);
+
+// Get raffle name
+const getRaffleName = useCallback(async (raffleId: number) => {
+  if (!publicClient) {
+    throw new RaffleError('Public client not available', 'CLIENT_ERROR');
+  }
+  
+  try {
+    const name = await publicClient.readContract({
+      address: contractAddress,
+      abi: raffleABI,
+      functionName: 'getRaffleName',
+      args: [BigInt(raffleId)],
+    }) as string;
+    
+    return name;
+  } catch (err) {
+    console.error('Error getting raffle name:', err);
+    throw new RaffleError('Failed to get raffle name', 'NAME_ERROR');
+  }
+}, [publicClient, contractAddress]);
+
+// Check if specific raffle is active
+const isRaffleActive = useCallback(async (raffleId: number) => {
+  if (!publicClient) {
+    throw new RaffleError('Public client not available', 'CLIENT_ERROR');
+  }
+  
+  try {
+    const isActive = await publicClient.readContract({
+      address: contractAddress,
+      abi: raffleABI,
+      functionName: 'isRaffleActive',
+      args: [BigInt(raffleId)],
+    }) as boolean;
+    
+    return isActive;
+  } catch (err) {
+    console.error('Error checking if raffle is active:', err);
+    throw new RaffleError('Failed to check raffle status', 'STATUS_ERROR');
+  }
+}, [publicClient, contractAddress]);
+
+// Reset error state
+const resetError = useCallback(() => {
+  if (mountedRef.current) {
+    setError(null);
+  }
+}, []);
+
+// Reset write state
+const resetWriteState = useCallback(() => {
+  if (mountedRef.current) {
+    resetWrite();
+  }
+}, [resetWrite]);
+
+// Format time remaining into a human-readable string
+const formatTimeRemaining = useCallback((seconds: number) => {
+  if (seconds <= 0) return 'Ended';
+  
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+  
+  if (days > 0) {
+    return `${days}d ${hours}h ${minutes}m`;
+  } else if (hours > 0) {
+    return `${hours}h ${minutes}m ${remainingSeconds}s`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${remainingSeconds}s`;
+  } else {
+    return `${remainingSeconds}s`;
+  }
+}, []);
+
+// Calculate number of tickets from ETH amount
+const calculateTicketsFromEth = useCallback((ethAmount: string) => {
+  if (!ethAmount || !ticketPrice) return '0';
+  
+  try {
     const amount = parseEther(ethAmount);
-    if (amount <= BigInt(0)) {
-      throw new RaffleError('Invalid ETH amount', 'INVALID_AMOUNT');
-    }
-    
-    try {
-      const tx = await writeContract({
-        address: contractAddress,
-        abi: raffleABI,
-        functionName: 'buyTicketsWithEth',
-        value: amount,
-      });
-      return tx;
-    } catch (err) {
-      console.error('Error buying tickets with ETH:', err);
-      throw new RaffleError('Failed to buy tickets with ETH', 'BUY_TICKETS_ERROR');
-    }
-  }, [walletClient, address, writeContract, contractAddress]);
+    const tickets = amount / ticketPrice;
+    return tickets.toString();
+  } catch (err) {
+    console.error('Error calculating tickets from ETH:', err);
+    return '0';
+  }
+}, [ticketPrice]);
 
-  // Calculate number of tickets from ETH amount
-  const calculateTicketsFromEth = useCallback((ethAmount: string) => {
-    if (!ethAmount || !ticketPrice) return '0';
-    
-    try {
-      const amount = parseEther(ethAmount);
-      const tickets = amount / ticketPrice;
-      return tickets.toString();
-    } catch (err) {
-      console.error('Error calculating tickets from ETH:', err);
-      return '0';
-    }
-  }, [ticketPrice]);
+// Validate raffle name
+const validateRaffleName = useCallback((name: string) => {
+  if (!name || name.trim().length === 0) {
+    return 'Raffle name cannot be empty';
+  }
+  if (name.length > 100) {
+    return 'Raffle name too long (max 100 characters)';
+  }
+  return null;
+}, []);
 
-  // Return all necessary data and functions
-  return {
-    isOwner,
-    loading,
-    error,
-    currentRaffleId,
-    ticketPrice,
-    timeRemaining,
-    winners,
-    raffleInfo,
-    currentDayNumber,
-    deploymentTime,
-    isAutoCheckingNewRaffle,
-    isWritePending,
-    isWaitingForTx,
-    isWriteSuccess,
-    isTxSuccess,
-    writeError,
+// Return all necessary data and functions
+return {
+  // State
+  isOwner,
+  isAdmin,
+  loading,
+  error,
+  currentRaffleId,
+  ticketPrice,
+  timeRemaining,
+  winners,
+  raffleInfo,
+  currentDayNumber,
+  deploymentTime,
+  isAutoCheckingNewRaffle,
+  raffleCreationFee,
+  
+  // Transaction states
+  isWritePending,
+  isWaitingForTx,
+  isWriteSuccess,
+  isTxSuccess,
+  writeError,
 
-    publicClient,
-    fetchRaffleInfo,
-    getDayRaffle,
-    getTodayRaffle,
-    getRaffleStats,
-    raffleExistsForDay,
-    checkAndCreateNewRaffle,
-    completeRaffle,
-    buyTickets,
-    buyTicketsWithEth,
-    getUserTickets,
-    withdrawFunds,
-    resetError,
-    resetWriteState,
-    formatTimeRemaining,
-    calculateTicketsFromEth
-  };
+  // Core functions
+  publicClient,
+  fetchRaffleInfo,
+  
+  // Read functions
+  getDayRaffle,
+  getRaffleInfo,
+  getRaffleStats,
+  getActiveRaffles,
+  getParticipantStats,
+  searchRafflesByName,
+  raffleExistsForDay,
+  hasParticipantWon,
+  getUserTickets,
+  getParticipants,
+  getWinners,
+  getRaffleName,
+  isRaffleActive,
+  
+  // Write functions - Raffle management
+  createCustomRaffle,
+  updateRaffleName,
+  completeRaffle,
+  
+  // Write functions - Ticket purchasing
+  buyTickets,
+  buyTicketsWithEth,
+  
+  // Write functions - Admin only
+  generateRandomWinners,
+  setWinners: setWinnersAdmin,
+  setWinnerCount,
+  
+  // Write functions - Owner only
+  addAdmin,
+  removeAdmin,
+  emergencyWithdraw,
+  
+  // Utility functions
+  resetError,
+  resetWriteState,
+  formatTimeRemaining,
+  calculateTicketsFromEth,
+  validateRaffleName
+};
 }
 
-// Export the hook for use in components
+// Export the enhanced hook
 export default useRaffleContract;
