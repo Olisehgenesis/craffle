@@ -838,6 +838,7 @@ const buyTickets = useCallback(async (raffleId: number, count: number) => {
       functionName: 'buyTickets',
       args: [BigInt(raffleId), BigInt(count)],
       value: totalCost,
+      chainId: celo.id,
     });
     return tx;
   } catch (err) {
@@ -864,6 +865,7 @@ const buyTicketsWithEth = useCallback(async (raffleId: number, ethAmount: string
       functionName: 'buyTicketsWithEth',
       args: [BigInt(raffleId)],
       value: amount,
+      chainId: celo.id,
     });
     return tx;
   } catch (err) {

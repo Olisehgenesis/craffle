@@ -19,52 +19,8 @@ export const raffleABI =[
   },
   {
     "type": "function",
-    "name": "MAX_RAFFLE_DURATION",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "MIN_RAFFLE_DURATION",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "addAdmin",
-    "inputs": [
-      {
-        "name": "admin",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "buyTickets",
     "inputs": [
-      {
-        "name": "raffleId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
       {
         "name": "_amount",
         "type": "uint256",
@@ -77,62 +33,47 @@ export const raffleABI =[
   {
     "type": "function",
     "name": "buyTicketsWithEth",
-    "inputs": [
-      {
-        "name": "raffleId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
+    "inputs": [],
     "outputs": [],
     "stateMutability": "payable"
   },
   {
     "type": "function",
-    "name": "completeRaffle",
-    "inputs": [
+    "name": "checkAndCreateNewRaffle",
+    "inputs": [],
+    "outputs": [
       {
-        "name": "raffleId",
-        "type": "uint256",
-        "internalType": "uint256"
+        "name": "newRaffleCreated",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "completeRaffle",
+    "inputs": [],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
   {
     "type": "function",
-    "name": "createCustomRaffle",
-    "inputs": [
-      {
-        "name": "_name",
-        "type": "string",
-        "internalType": "string"
-      },
-      {
-        "name": "_startTime",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "_endTime",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "_maxWinners",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
+    "name": "createDailyRaffle",
+    "inputs": [],
     "outputs": [
       {
         "name": "raffleId",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "dayNumber",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
-    "stateMutability": "payable"
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -188,38 +129,6 @@ export const raffleABI =[
   },
   {
     "type": "function",
-    "name": "generateRandomWinners",
-    "inputs": [
-      {
-        "name": "raffleId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "winners",
-        "type": "address[]",
-        "internalType": "address[]"
-      }
-    ],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "getActiveRaffles",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "activeRaffles",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "getCurrentDayNumber",
     "inputs": [],
     "outputs": [
@@ -233,24 +142,13 @@ export const raffleABI =[
   },
   {
     "type": "function",
-    "name": "getDayRaffle",
-    "inputs": [
-      {
-        "name": "dayNumber",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
+    "name": "getCurrentRaffleInfo",
+    "inputs": [],
     "outputs": [
       {
         "name": "raffleId",
         "type": "uint256",
         "internalType": "uint256"
-      },
-      {
-        "name": "name",
-        "type": "string",
-        "internalType": "string"
       },
       {
         "name": "startTime",
@@ -281,38 +179,66 @@ export const raffleABI =[
         "name": "completed",
         "type": "bool",
         "internalType": "bool"
-      },
-      {
-        "name": "creator",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "maxWinners",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
   },
   {
     "type": "function",
-    "name": "getParticipantStats",
+    "name": "getDayRaffle",
     "inputs": [
       {
-        "name": "participant",
-        "type": "address",
-        "internalType": "address"
+        "name": "dayNumber",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [
+      {
+        "name": "raffleId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "startTime",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "endTime",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "ticketPrice",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
       {
         "name": "totalTickets",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "totalSpent",
+        "name": "prizePool",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "completed",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getDeploymentTime",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -340,24 +266,76 @@ export const raffleABI =[
   },
   {
     "type": "function",
-    "name": "getRaffleInfo",
+    "name": "getRaffleStats",
     "inputs": [
       {
-        "name": "raffleId",
+        "name": "startDay",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "endDay",
         "type": "uint256",
         "internalType": "uint256"
       }
     ],
     "outputs": [
       {
-        "name": "id",
+        "name": "raffleIds",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      },
+      {
+        "name": "totalTicketsArray",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      },
+      {
+        "name": "prizePoolsArray",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      },
+      {
+        "name": "completedArray",
+        "type": "bool[]",
+        "internalType": "bool[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getTicketsPurchased",
+    "inputs": [
+      {
+        "name": "_raffleId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "name",
-        "type": "string",
-        "internalType": "string"
+        "name": "_participant",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getTodayRaffle",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "raffleId",
+        "type": "uint256",
+        "internalType": "uint256"
       },
       {
         "name": "startTime",
@@ -388,40 +366,6 @@ export const raffleABI =[
         "name": "completed",
         "type": "bool",
         "internalType": "bool"
-      },
-      {
-        "name": "creator",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "maxWinners",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "dayNumber",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getRaffleName",
-    "inputs": [
-      {
-        "name": "raffleId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "name",
-        "type": "string",
-        "internalType": "string"
       }
     ],
     "stateMutability": "view"
@@ -471,70 +415,8 @@ export const raffleABI =[
   },
   {
     "type": "function",
-    "name": "hasParticipantWon",
-    "inputs": [
-      {
-        "name": "raffleId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "participant",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "hasWon",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "isAdmin",
-    "inputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "isCurrentRaffleActive",
     "inputs": [],
-    "outputs": [
-      {
-        "name": "active",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "isRaffleActive",
-    "inputs": [
-      {
-        "name": "raffleId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
     "outputs": [
       {
         "name": "active",
@@ -559,13 +441,19 @@ export const raffleABI =[
   },
   {
     "type": "function",
-    "name": "raffleCreationFee",
-    "inputs": [],
-    "outputs": [
+    "name": "raffleExistsForDay",
+    "inputs": [
       {
-        "name": "",
+        "name": "dayNumber",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "exists",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
@@ -585,11 +473,6 @@ export const raffleABI =[
         "name": "id",
         "type": "uint256",
         "internalType": "uint256"
-      },
-      {
-        "name": "name",
-        "type": "string",
-        "internalType": "string"
       },
       {
         "name": "startTime",
@@ -625,32 +508,9 @@ export const raffleABI =[
         "name": "dayNumber",
         "type": "uint256",
         "internalType": "uint256"
-      },
-      {
-        "name": "creator",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "maxWinners",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "removeAdmin",
-    "inputs": [
-      {
-        "name": "admin",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -661,44 +521,21 @@ export const raffleABI =[
   },
   {
     "type": "function",
-    "name": "searchRafflesByName",
+    "name": "selectWinners",
     "inputs": [
       {
-        "name": "searchTerm",
-        "type": "string",
-        "internalType": "string"
-      },
-      {
-        "name": "maxResults",
+        "name": "_raffleId",
         "type": "uint256",
         "internalType": "uint256"
       }
     ],
     "outputs": [
       {
-        "name": "raffleIds",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
-      },
-      {
-        "name": "names",
-        "type": "string[]",
-        "internalType": "string[]"
+        "name": "selectedWinners",
+        "type": "address[]",
+        "internalType": "address[]"
       }
     ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "setRaffleCreationFee",
-    "inputs": [
-      {
-        "name": "newFee",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [],
     "stateMutability": "nonpayable"
   },
   {
@@ -751,44 +588,25 @@ export const raffleABI =[
     "stateMutability": "nonpayable"
   },
   {
-    "type": "function",
-    "name": "updateRaffleName",
+    "type": "event",
+    "name": "DailyRaffleCreated",
     "inputs": [
       {
         "name": "raffleId",
         "type": "uint256",
+        "indexed": true,
         "internalType": "uint256"
       },
       {
-        "name": "newName",
-        "type": "string",
-        "internalType": "string"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "event",
-    "name": "AdminAdded",
-    "inputs": [
+        "name": "dayNumber",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
       {
-        "name": "admin",
+        "name": "creator",
         "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "AdminRemoved",
-    "inputs": [
-      {
-        "name": "admin",
-        "type": "address",
-        "indexed": true,
+        "indexed": false,
         "internalType": "address"
       }
     ],
@@ -803,12 +621,6 @@ export const raffleABI =[
         "type": "uint256",
         "indexed": true,
         "internalType": "uint256"
-      },
-      {
-        "name": "name",
-        "type": "string",
-        "indexed": false,
-        "internalType": "string"
       },
       {
         "name": "dayNumber",
@@ -874,12 +686,6 @@ export const raffleABI =[
         "internalType": "uint256"
       },
       {
-        "name": "name",
-        "type": "string",
-        "indexed": false,
-        "internalType": "string"
-      },
-      {
         "name": "startTime",
         "type": "uint256",
         "indexed": false,
@@ -896,44 +702,6 @@ export const raffleABI =[
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
-      },
-      {
-        "name": "creator",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "RaffleCreationFeeUpdated",
-    "inputs": [
-      {
-        "name": "newFee",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "RaffleNameUpdated",
-    "inputs": [
-      {
-        "name": "raffleId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "newName",
-        "type": "string",
-        "indexed": false,
-        "internalType": "string"
       }
     ],
     "anonymous": false
@@ -956,6 +724,31 @@ export const raffleABI =[
       },
       {
         "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "WinnersAutoSelected",
+    "inputs": [
+      {
+        "name": "raffleId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "winners",
+        "type": "address[]",
+        "indexed": false,
+        "internalType": "address[]"
+      },
+      {
+        "name": "totalParticipants",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
