@@ -5,7 +5,6 @@ import { celo } from 'viem/chains';
 import { useSwitchChain } from 'wagmi';
 import { getDataSuffix, submitReferral } from '@divvi/referral-sdk';
 import { raffleABI } from './hooks/abi';
-import { PublicClient } from 'viem';
 
 const RAFFLE_CONTRACT_ADDRESS = '0x492CC1634AA2E8Ba909F2a61d886ef6c8C651074';
 
@@ -19,10 +18,14 @@ const DIVVI_CONFIG = {
 };
 
 export default function CeloRaffleApp() {
-  const [publicClient, setPublicClient] = useState<PublicClient | null>(null);
+  console.log('Component rendering');
+  
+  const { address } = useAccount();
+  const publicClient = usePublicClient({ chainId: celo.id });
+  const { data: walletClient } = useWalletClient();
+  
   const [account, setAccount] = useState<`0x${string}` | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
-  
   
   // Purchase states
   const [ticketAmount, setTicketAmount] = useState(1);
@@ -55,7 +58,14 @@ export default function CeloRaffleApp() {
 
   const { switchChain } = useSwitchChain();
 
-  const { data: walletClient } = useWalletClient();
+  console.log('Current state:', {
+    publicClient,
+    account,
+    address,
+    isConnecting,
+    raffleInfo,
+    isLoading
+  });
 
   // Switch to Celo network
   const switchToCelo = async () => {
@@ -66,44 +76,32 @@ export default function CeloRaffleApp() {
     }
   };
 
-  // Initialize clients
-  useEffect(() => {
-    const initializeClients = () => {
-      const publicClientInstance = usePublicClient({
-        chainId: celo.id,
-      
-      });
-      setPublicClient(publicClientInstance as any);
-    };
-
-    initializeClients();
-  }, []);
-
-// Connect Wallet with animation
-const connectWallet = async () => {
- 
+  // Connect Wallet with animation
+  const connectWallet = async () => {
+    console.log('Connecting wallet...');
     setIsConnecting(true);
     setIsAnimating(true);
     
     try {
-      const { address } = useAccount();
-      
       if (address) {
+        console.log('Setting account to:', address);
         setAccount(address);
         setError('');
         setSuccess('🎉 Wallet connected! Welcome to the raffle!');
         setShowConfetti(true);
       } else {
+        console.log('No address found');
         setError('No address found in wallet');
       }
       setTimeout(() => setShowConfetti(false), 3000);
     } catch (err: unknown) {
+      console.error('Wallet connection error:', err);
       setError('Failed to connect wallet: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setIsConnecting(false);
       setIsAnimating(false);
     }
-  };''
+  };
 
   // Fetch current raffle info
   const fetchRaffleInfo = async () => {
