@@ -1,5 +1,5 @@
 import { farcasterFrame } from "@farcaster/frame-wagmi-connector";
-import { http, createConfig } from "wagmi";
+import { http, createConfig, injected } from "wagmi";
 import { celo } from "wagmi/chains";
 import { WagmiProvider } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -7,7 +7,7 @@ import { ReactNode } from 'react';
 
 export const config = createConfig({
   chains: [celo],
-  connectors: [farcasterFrame()],
+  connectors: [farcasterFrame(), injected()],
   transports: {
     [celo.id]: http(),
   },

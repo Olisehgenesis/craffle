@@ -1,5 +1,6 @@
-import  { useState, useEffect } from 'react';
-import { createWalletClient, parseEther, encodeFunctionData, formatEther, createPublicClient, http, WalletClient } from 'viem';
+import { useState, useEffect } from 'react';
+import {  parseEther, encodeFunctionData, formatEther } from 'viem';
+import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import { celo } from 'viem/chains';
 import { useSwitchChain } from 'wagmi';
 import { getDataSuffix, submitReferral } from '@divvi/referral-sdk';
@@ -18,10 +19,10 @@ const DIVVI_CONFIG = {
 };
 
 export default function CeloRaffleApp() {
-  const [walletClient, setWalletClient] = useState<WalletClient | null>(null);
   const [publicClient, setPublicClient] = useState<PublicClient | null>(null);
   const [account, setAccount] = useState<`0x${string}` | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  
   
   // Purchase states
   const [ticketAmount, setTicketAmount] = useState(1);
@@ -54,6 +55,8 @@ export default function CeloRaffleApp() {
 
   const { switchChain } = useSwitchChain();
 
+  const { data: walletClient } = useWalletClient();
+
   // Switch to Celo network
   const switchToCelo = async () => {
     try {
@@ -66,9 +69,9 @@ export default function CeloRaffleApp() {
   // Initialize clients
   useEffect(() => {
     const initializeClients = () => {
-      const publicClientInstance = createPublicClient({
-        chain: celo,
-        transport: http()
+      const publicClientInstance = usePublicClient({
+        chainId: celo.id,
+      
       });
       setPublicClient(publicClientInstance as any);
     };
@@ -78,26 +81,21 @@ export default function CeloRaffleApp() {
 
 // Connect Wallet with animation
 const connectWallet = async () => {
-  if (typeof window === 'undefined' || !(window as any).ethereum) {
-    setError('Please install MetaMask or another Web3 wallet 💼');
-    return;
-  }
-
+ 
     setIsConnecting(true);
     setIsAnimating(true);
     
     try {
-      const client = createWalletClient({
-        chain: celo,
-        transport: http()
-      });
-
-      const [address] = await client.getAddresses();
-      setWalletClient(client);
-      setAccount(address as `0x${string}`);
-      setError('');
-      setSuccess('🎉 Wallet connected! Welcome to the raffle!');
-      setShowConfetti(true);
+      const { address } = useAccount();
+      
+      if (address) {
+        setAccount(address);
+        setError('');
+        setSuccess('🎉 Wallet connected! Welcome to the raffle!');
+        setShowConfetti(true);
+      } else {
+        setError('No address found in wallet');
+      }
       setTimeout(() => setShowConfetti(false), 3000);
     } catch (err: unknown) {
       setError('Failed to connect wallet: ' + (err instanceof Error ? err.message : 'Unknown error'));
@@ -194,7 +192,7 @@ const connectWallet = async () => {
 
       const hash = await walletClient.sendTransaction({
         account,
-        to: RAFFLE_CONTRACT_ADDRESS,
+        to: RAFFLE_CONTRACT_ADDRESS as `0x${string}`,
         data: finalData as `0x${string}`,
         chain: celo
       });
@@ -222,7 +220,7 @@ const connectWallet = async () => {
       } else {
         setError('❌ Transaction failed');
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Create raffle error:', err);
       setError('Failed to create daily raffle: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
@@ -232,14 +230,9 @@ const connectWallet = async () => {
   };
 
   // Buy tickets with enhanced feedback
-  const buyTickets = async () => {
-    if (!walletClient || !account || !raffleInfo) {
-      setError('Please connect your wallet and ensure raffle info is loaded 🔄');
-      return;
-    }
-
-    if (ticketAmount <= 0) {
-      setError('Please enter a valid ticket amount 🎫');
+  const buyTickets = async (quantity: number) => {
+    if (!walletClient || !account) {
+      setError('Please connect your wallet first 🔌');
       return;
     }
 
@@ -250,12 +243,10 @@ const connectWallet = async () => {
     setTxHash('');
 
     try {
-      const totalCost = BigInt(ticketAmount) * raffleInfo.ticketPrice;
-
       const encoded = encodeFunctionData({
         abi: raffleABI,
         functionName: 'buyTickets',
-        args: [BigInt(ticketAmount)]
+        args: [quantity]
       });
 
       const dataSuffix = getDataSuffix({
@@ -268,12 +259,11 @@ const connectWallet = async () => {
         account,
         to: RAFFLE_CONTRACT_ADDRESS as `0x${string}`,
         data: finalData as `0x${string}`,
-        value: totalCost,
         chain: celo
       });
 
       setTxHash(hash);
-      setSuccess(`🎫 Buying ${ticketAmount} ticket(s)... Good luck!`);
+      setSuccess('🚀 Ticket purchase in progress...');
 
       if (!publicClient) {
         throw new Error('Public client not initialized');
@@ -287,16 +277,15 @@ const connectWallet = async () => {
           chainId
         });
 
-        setSuccess(`🎉 Successfully bought ${ticketAmount} ticket(s)! You're in the game!`);
+        setSuccess('🎊 Tickets purchased successfully!');
         setShowConfetti(true);
         setTimeout(() => setShowConfetti(false), 3000);
         
         await fetchRaffleInfo();
-        await fetchUserTickets();
       } else {
         setError('❌ Transaction failed');
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Buy tickets error:', err);
       setError('Failed to buy tickets: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
@@ -636,7 +625,7 @@ const connectWallet = async () => {
                       )}
                     </div>
                     <button
-                      onClick={buyTickets}
+                      onClick={() => buyTickets(ticketAmount)}
                       disabled={isLoading || ticketAmount <= 0}
                       className={`w-full bg-lotus hover:bg-lotus/80 text-white font-bold py-3 px-4 rounded-xl transition-all transform hover:scale-105 disabled:opacity-50 ${
                         isAnimating ? 'animate-pulse' : ''
