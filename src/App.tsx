@@ -474,14 +474,16 @@ export default function CeloRaffleApp() {
        if (publicClient) {
          await fetchRaffleInfo();
        }
+
+       // Set app as ready first to avoid jitter
+       setIsAppReady(true);
        
        // Only call ready if we're in a mini app context
        if (isMiniApp) {
-         await sdk.actions.ready();
+         // Disable native gestures to prevent accidental dismissal
+         await sdk.actions.ready({ disableNativeGestures: true });
          console.log('✅ Farcaster Mini App ready');
        }
-       
-       setIsAppReady(true);
      } catch (error) {
        console.error('Failed to initialize Farcaster Mini App:', error);
        // Fallback - mark as ready anyway
