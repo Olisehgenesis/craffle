@@ -259,21 +259,65 @@ export default function CeloRaffleApp() {
 
  // Fetch user tickets
  const fetchUserTickets = useCallback(async () => {
-   if (!publicClient || !account || !raffleInfo) return;
+   if (!publicClient || !account || !raffleInfo) {
+     console.log('Missing requirements:', { 
+       hasPublicClient: !!publicClient, 
+       hasAccount: !!account, 
+       hasRaffleInfo: !!raffleInfo 
+     });
+     return;
+   }
 
    try {
+     console.log('🔍 Fetching tickets for:', {
+       account,
+       raffleId: raffleInfo.raffleId,
+       contract: RAFFLE_CONTRACT_ADDRESS
+     });
+
      const tickets = await publicClient.readContract({
-       address: RAFFLE_CONTRACT_ADDRESS,
+       address: RAFFLE_CONTRACT_ADDRESS as `0x${string}`,
        abi: raffleABI,
        functionName: 'getUserTickets',
        args: [account, BigInt(raffleInfo.raffleId)]
      });
 
-     setUserTickets(Number(tickets));
+     const ticketCount = Number(tickets);
+     console.log('✅ Tickets fetched:', ticketCount);
+     
+     if (ticketCount !== userTickets) {
+       console.log('🔄 Updating ticket count from', userTickets, 'to', ticketCount);
+       setUserTickets(ticketCount);
+     }
    } catch (err) {
-     console.error('Failed to fetch user tickets:', err);
+     console.error('❌ Failed to fetch user tickets:', err);
+     // Don't update state on error to keep previous value
    }
- }, [publicClient, account, raffleInfo]);
+ }, [publicClient, account, raffleInfo, userTickets]);
+
+ // Add immediate ticket fetch when account or raffle changes
+ useEffect(() => {
+   if (account && raffleInfo) {
+     console.log('🔄 Account or raffle changed, fetching tickets...');
+     fetchUserTickets();
+   }
+ }, [account, raffleInfo?.raffleId, fetchUserTickets]);
+
+ // Add polling for ticket updates
+ useEffect(() => {
+   if (!publicClient || !account || !raffleInfo) return;
+
+   console.log('⏰ Starting ticket polling...');
+   const interval = setInterval(() => {
+     console.log('🔄 Polling for ticket updates...');
+     fetchUserTickets();
+   }, 5000); // Check every 5 seconds
+
+   return () => {
+     console.log('🛑 Stopping ticket polling');
+     clearInterval(interval);
+   };
+ }, [publicClient, account, raffleInfo, fetchUserTickets]);
 
  // Create daily raffle with Divvi
  const createDailyRaffle = async () => {
@@ -320,22 +364,41 @@ export default function CeloRaffleApp() {
 
    try {
      const totalPrice = raffleInfo.ticketPrice * BigInt(quantity);
+     console.log('💰 Buying tickets:', {
+       quantity,
+       totalPrice: formatEther(totalPrice),
+       raffleId: raffleInfo.raffleId
+     });
      
      await executeWithDivvi({
        functionName: 'buyTickets',
        args: [BigInt(quantity)],
        value: totalPrice,
-       onSuccess: (txHash) => {
+       onSuccess: async (txHash) => {
          setTxHash(txHash);
-         showSuccess('🎊 Tickets purchased successfully!', true); // Reload after ticket purchase
-         fetchRaffleInfo();
-         fetchUserTickets();
+         showSuccess('🎊 Tickets purchased successfully!');
+         
+         // Wait for transaction to be mined
+         if (publicClient) {
+           console.log('⏳ Waiting for transaction confirmation...');
+           await publicClient.waitForTransactionReceipt({ hash: txHash as `0x${string}` });
+           console.log('✅ Transaction confirmed, refreshing data...');
+           
+           // Refresh data after transaction is confirmed
+           await Promise.all([
+             fetchRaffleInfo(),
+             fetchUserTickets()
+           ]);
+           console.log('✅ Data refreshed after purchase');
+         }
        },
        onError: (error) => {
+         console.error('❌ Purchase failed:', error);
          setError('Failed to buy tickets: ' + error.message);
        }
      });
    } catch (err) {
+     console.error('❌ Purchase error:', err);
      // Error already handled in onError callback
    } finally {
      setIsLoading(false);
