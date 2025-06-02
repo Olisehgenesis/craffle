@@ -1,39 +1,176 @@
-import { useState, useEffect } from 'react';
-import {  parseEther, encodeFunctionData, formatEther } from 'viem';
-import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
+import { useState, useEffect, useCallback } from 'react';
+import { parseEther, formatEther, Address } from 'viem';
+import { useAccount, usePublicClient, useWalletClient, useSendTransaction } from 'wagmi';
 import { celo } from 'viem/chains';
 import { useSwitchChain } from 'wagmi';
 import { getDataSuffix, submitReferral } from '@divvi/referral-sdk';
-import { raffleABI } from './hooks/abi';
+import { Interface } from 'ethers';
+
+// Mock ABI - replace with your actual raffle ABI
+const raffleABI = [
+  {
+    inputs: [],
+    name: 'createDailyRaffle',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'quantity', type: 'uint256' }],
+    name: 'buyTickets',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [],
+    name: 'buyTicketsWithEth',
+    outputs: [],
+    stateMutability: 'payable',
+    type: 'function'
+  },
+  {
+    inputs: [],
+    name: 'getCurrentRaffleInfo',
+    outputs: [
+      { name: 'raffleId', type: 'uint256' },
+      { name: 'startTime', type: 'uint256' },
+      { name: 'endTime', type: 'uint256' },
+      { name: 'ticketPrice', type: 'uint256' },
+      { name: 'totalTickets', type: 'uint256' },
+      { name: 'prizePool', type: 'uint256' },
+      { name: 'completed', type: 'bool' }
+    ],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [],
+    name: 'getCurrentDayNumber',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [],
+    name: 'isCurrentRaffleActive',
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [
+      { name: 'user', type: 'address' },
+      { name: 'raffleId', type: 'uint256' }
+    ],
+    name: 'getUserTickets',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  }
+];
 
 const RAFFLE_CONTRACT_ADDRESS = '0x492CC1634AA2E8Ba909F2a61d886ef6c8C651074';
 
+// Centralized Divvi configuration
 const DIVVI_CONFIG = {
-  consumer: '0x53eaF4CD171842d8144e45211308e5D90B4b0088',
+  consumer: '0x53eaF4CD171842d8144e45211308e5D90B4b0088' as `0x${string}`,
   providers: [
     '0x0423189886d7966f0dd7e7d256898daeee625dca',
-    '0xc95876688026be9d6fa7a7c33328bd013effa2bb',
+    '0xc95876688026be9d6fa7a7c33328bd013effa2bb', 
     '0x5f0a55fad9424ac99429f635dfb9bf20c3360ab8'
-  ]
+  ] as `0x${string}`[]
+};
+
+// Custom hook for Divvi-enabled transactions
+const useDivviTransaction = () => {
+  const { sendTransactionAsync } = useSendTransaction();
+  const { data: walletClient } = useWalletClient();
+  const publicClient = usePublicClient({ chainId: celo.id });
+
+  const executeWithDivvi = useCallback(async ({
+    functionName,
+    args = [],
+    value,
+    onSuccess,
+    onError
+  }: {
+    functionName: string;
+    args?: any[];
+    value?: bigint;
+    onSuccess?: (txHash: string) => void;
+    onError?: (error: Error) => void;
+  }) => {
+    try {
+      if (!walletClient) throw new Error('Wallet not connected');
+
+      // Create interface and encode function data
+      const raffleInterface = new Interface(raffleABI);
+      const encodedData = raffleInterface.encodeFunctionData(functionName, args);
+
+      // Get Divvi data suffix
+      const dataSuffix = getDataSuffix(DIVVI_CONFIG);
+      const finalData = encodedData + dataSuffix;
+
+      // Send transaction with Divvi integration
+      const txHash = await sendTransactionAsync({
+        to: RAFFLE_CONTRACT_ADDRESS as Address,
+        data: finalData as `0x${string}`,
+        value,
+      });
+
+      if (!txHash) throw new Error('Transaction failed to send');
+
+      // Wait for confirmation
+      if (publicClient) {
+        const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+        
+        if (receipt.status === 'success') {
+          // Submit to Divvi
+          try {
+            const chainId = await walletClient.getChainId();
+            await submitReferral({
+              txHash: txHash as `0x${string}`,
+              chainId
+            });
+            console.log('✅ Divvi referral submitted successfully');
+          } catch (referralError) {
+            console.error('Referral submission error:', referralError);
+          }
+
+          onSuccess?.(txHash);
+          return txHash;
+        } else {
+          throw new Error('Transaction failed');
+        }
+      }
+
+      return txHash;
+    } catch (error) {
+      console.error(`Error in ${functionName}:`, error);
+      onError?.(error as Error);
+      throw error;
+    }
+  }, [sendTransactionAsync, walletClient, publicClient]);
+
+  return { executeWithDivvi };
 };
 
 export default function CeloRaffleApp() {
-  console.log('Component rendering');
-  
   const { address } = useAccount();
   const publicClient = usePublicClient({ chainId: celo.id });
-  const { data: walletClient } = useWalletClient();
+  const { switchChain } = useSwitchChain();
+  const { executeWithDivvi } = useDivviTransaction();
   
+  // State management
   const [account, setAccount] = useState<`0x${string}` | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
-  
-  // Purchase states
   const [ticketAmount, setTicketAmount] = useState(1);
   const [ethAmount, setEthAmount] = useState('');
   const [purchaseMethod, setPurchaseMethod] = useState('tickets');
   const [isLoading, setIsLoading] = useState(false);
   
-  // Raffle info
+  // Raffle state
   const [raffleInfo, setRaffleInfo] = useState<{
     raffleId: number;
     startTime: Date;
@@ -47,25 +184,25 @@ export default function CeloRaffleApp() {
   const [currentDayNumber, setCurrentDayNumber] = useState(0);
   const [isRaffleActive, setIsRaffleActive] = useState(false);
   
-  // Transaction states
+  // UI state
   const [txHash, setTxHash] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  
-  // Animation states
   const [isAnimating, setIsAnimating] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
 
-  const { switchChain } = useSwitchChain();
+  // Utility functions
+  const showSuccess = useCallback((message: string) => {
+    setSuccess(message);
+    setShowConfetti(true);
+    setTimeout(() => setShowConfetti(false), 3000);
+  }, []);
 
-  console.log('Current state:', {
-    publicClient,
-    account,
-    address,
-    isConnecting,
-    raffleInfo,
-    isLoading
-  });
+  const resetMessages = useCallback(() => {
+    setError('');
+    setSuccess('');
+    setTxHash('');
+  }, []);
 
   // Switch to Celo network
   const switchToCelo = async () => {
@@ -76,26 +213,20 @@ export default function CeloRaffleApp() {
     }
   };
 
-  // Connect Wallet with animation
+  // Connect wallet
   const connectWallet = async () => {
-    console.log('Connecting wallet...');
     setIsConnecting(true);
     setIsAnimating(true);
     
     try {
       if (address) {
-        console.log('Setting account to:', address);
         setAccount(address);
-        setError('');
-        setSuccess('🎉 Wallet connected! Welcome to the raffle!');
-        setShowConfetti(true);
+        resetMessages();
+        showSuccess('🎉 Wallet connected! Welcome to the raffle!');
       } else {
-        console.log('No address found');
         setError('No address found in wallet');
       }
-      setTimeout(() => setShowConfetti(false), 3000);
-    } catch (err: unknown) {
-      console.error('Wallet connection error:', err);
+    } catch (err) {
       setError('Failed to connect wallet: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setIsConnecting(false);
@@ -103,8 +234,8 @@ export default function CeloRaffleApp() {
     }
   };
 
-  // Fetch current raffle info
-  const fetchRaffleInfo = async () => {
+  // Fetch raffle information
+  const fetchRaffleInfo = useCallback(async () => {
     if (!publicClient) return;
 
     try {
@@ -142,10 +273,10 @@ export default function CeloRaffleApp() {
       console.error('Failed to fetch raffle info:', err);
       setError('Failed to fetch raffle information 📊');
     }
-  };
+  }, [publicClient]);
 
   // Fetch user tickets
-  const fetchUserTickets = async () => {
+  const fetchUserTickets = useCallback(async () => {
     if (!publicClient || !account || !raffleInfo) return;
 
     try {
@@ -160,141 +291,76 @@ export default function CeloRaffleApp() {
     } catch (err) {
       console.error('Failed to fetch user tickets:', err);
     }
-  };
+  }, [publicClient, account, raffleInfo]);
 
-  // Create daily raffle with enhanced feedback
+  // Create daily raffle with Divvi
   const createDailyRaffle = async () => {
-    if (!walletClient || !account) {
+    if (!account) {
       setError('Please connect your wallet first 🔌');
       return;
     }
 
     setIsLoading(true);
     setIsAnimating(true);
-    setError('');
-    setSuccess('');
-    setTxHash('');
+    resetMessages();
 
     try {
-      const encoded = encodeFunctionData({
-        abi: raffleABI,
+      await executeWithDivvi({
         functionName: 'createDailyRaffle',
-        args: []
+        args: [],
+        onSuccess: (txHash) => {
+          setTxHash(txHash);
+          showSuccess('🎊 Daily raffle created successfully!');
+          fetchRaffleInfo();
+        },
+        onError: (error) => {
+          setError('Failed to create daily raffle: ' + error.message);
+        }
       });
-
-      const dataSuffix = getDataSuffix({
-        consumer: account as `0x${string}`,
-        providers: DIVVI_CONFIG.providers.map(provider => provider as `0x${string}`)
-      });
-      const finalData = encoded + dataSuffix;
-
-      const hash = await walletClient.sendTransaction({
-        account,
-        to: RAFFLE_CONTRACT_ADDRESS as `0x${string}`,
-        data: finalData as `0x${string}`,
-        chain: celo
-      });
-
-      setTxHash(hash);
-      setSuccess('🚀 Daily raffle creation in progress...');
-
-      if (!publicClient) {
-        throw new Error('Public client not initialized');
-      }
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      
-      if (receipt.status === 'success') {
-        const chainId = await walletClient.getChainId();
-        await submitReferral({
-          txHash: hash,
-          chainId
-        });
-
-        setSuccess('🎊 Daily raffle created successfully!');
-        setShowConfetti(true);
-        setTimeout(() => setShowConfetti(false), 3000);
-        
-        await fetchRaffleInfo();
-      } else {
-        setError('❌ Transaction failed');
-      }
-    } catch (err: unknown) {
-      console.error('Create raffle error:', err);
-      setError('Failed to create daily raffle: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } catch (err) {
+      // Error already handled in onError callback
     } finally {
       setIsLoading(false);
       setIsAnimating(false);
     }
   };
 
-  // Buy tickets with enhanced feedback
+  // Buy tickets with Divvi
   const buyTickets = async (quantity: number) => {
-    if (!walletClient || !account) {
+    if (!account) {
       setError('Please connect your wallet first 🔌');
       return;
     }
 
     setIsLoading(true);
     setIsAnimating(true);
-    setError('');
-    setSuccess('');
-    setTxHash('');
+    resetMessages();
 
     try {
-      const encoded = encodeFunctionData({
-        abi: raffleABI,
+      await executeWithDivvi({
         functionName: 'buyTickets',
-        args: [quantity]
+        args: [quantity],
+        onSuccess: (txHash) => {
+          setTxHash(txHash);
+          showSuccess('🎊 Tickets purchased successfully!');
+          fetchRaffleInfo();
+          fetchUserTickets();
+        },
+        onError: (error) => {
+          setError('Failed to buy tickets: ' + error.message);
+        }
       });
-
-      const dataSuffix = getDataSuffix({
-        consumer: account as `0x${string}`,
-        providers: DIVVI_CONFIG.providers.map(provider => provider as `0x${string}`)
-      });
-      const finalData = encoded + dataSuffix;
-
-      const hash = await walletClient.sendTransaction({
-        account,
-        to: RAFFLE_CONTRACT_ADDRESS as `0x${string}`,
-        data: finalData as `0x${string}`,
-        chain: celo
-      });
-
-      setTxHash(hash);
-      setSuccess('🚀 Ticket purchase in progress...');
-
-      if (!publicClient) {
-        throw new Error('Public client not initialized');
-      }
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      
-      if (receipt.status === 'success') {
-        const chainId = await walletClient.getChainId();
-        await submitReferral({
-          txHash: hash,
-          chainId
-        });
-
-        setSuccess('🎊 Tickets purchased successfully!');
-        setShowConfetti(true);
-        setTimeout(() => setShowConfetti(false), 3000);
-        
-        await fetchRaffleInfo();
-      } else {
-        setError('❌ Transaction failed');
-      }
-    } catch (err: unknown) {
-      console.error('Buy tickets error:', err);
-      setError('Failed to buy tickets: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } catch (err) {
+      // Error already handled in onError callback
     } finally {
       setIsLoading(false);
       setIsAnimating(false);
     }
   };
 
-  // Buy tickets with ETH with enhanced feedback
+  // Buy tickets with ETH and Divvi
   const buyTicketsWithEth = async () => {
-    if (!walletClient || !account || !ethAmount) {
+    if (!account || !ethAmount) {
       setError('Please connect your wallet and enter a CELO amount 💰');
       return;
     }
@@ -306,61 +372,28 @@ export default function CeloRaffleApp() {
 
     setIsLoading(true);
     setIsAnimating(true);
-    setError('');
-    setSuccess('');
-    setTxHash('');
+    resetMessages();
 
     try {
       const ethValue = parseEther(ethAmount);
 
-      const encoded = encodeFunctionData({
-        abi: raffleABI,
+      await executeWithDivvi({
         functionName: 'buyTicketsWithEth',
-        args: []
-      });
-
-      const dataSuffix = getDataSuffix({
-        consumer: account as `0x${string}`,
-        providers: DIVVI_CONFIG.providers.map(provider => provider as `0x${string}`)
-      });
-      const finalData = encoded + dataSuffix;
-
-      const hash = await walletClient.sendTransaction({
-        account,
-        to: RAFFLE_CONTRACT_ADDRESS as `0x${string}`,
-        data: finalData as `0x${string}`,
+        args: [],
         value: ethValue,
-        chain: celo
+        onSuccess: (txHash) => {
+          setTxHash(txHash);
+          showSuccess(`🎊 Successfully bought tickets with ${ethAmount} CELO!`);
+          setEthAmount('');
+          fetchRaffleInfo();
+          fetchUserTickets();
+        },
+        onError: (error) => {
+          setError('Failed to buy tickets with CELO: ' + error.message);
+        }
       });
-
-      setTxHash(hash);
-      setSuccess(`💸 Buying tickets with ${ethAmount} CELO...`);
-
-      if (!publicClient) {
-        throw new Error('Public client not initialized');
-      }
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      
-      if (receipt.status === 'success') {
-        const chainId = await walletClient.getChainId();
-        await submitReferral({
-          txHash: hash,
-          chainId
-        });
-
-        setSuccess(`🎊 Successfully bought tickets with ${ethAmount} CELO!`);
-        setShowConfetti(true);
-        setTimeout(() => setShowConfetti(false), 3000);
-        
-        setEthAmount('');
-        await fetchRaffleInfo();
-        await fetchUserTickets();
-      } else {
-        setError('❌ Transaction failed');
-      }
     } catch (err) {
-      console.error('Buy tickets with ETH error:', err);
-      setError('Failed to buy tickets with CELO: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      // Error already handled in onError callback
     } finally {
       setIsLoading(false);
       setIsAnimating(false);
@@ -387,18 +420,18 @@ export default function CeloRaffleApp() {
     return ((userTickets / raffleInfo.totalTickets) * 100).toFixed(2);
   };
 
-  // Load data effects
+  // Effects
   useEffect(() => {
     if (publicClient) {
       fetchRaffleInfo();
     }
-  }, [publicClient]);
+  }, [fetchRaffleInfo]);
 
   useEffect(() => {
     if (raffleInfo && account) {
       fetchUserTickets();
     }
-  }, [raffleInfo, account]);
+  }, [fetchUserTickets]);
 
   useEffect(() => {
     if (!publicClient) return;
@@ -411,7 +444,7 @@ export default function CeloRaffleApp() {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [publicClient, account, raffleInfo]);
+  }, [publicClient, account, raffleInfo, fetchRaffleInfo, fetchUserTickets]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-yellow-50 to-green-100 p-4 relative overflow-hidden">
@@ -447,25 +480,25 @@ export default function CeloRaffleApp() {
         {/* Header */}
         <div className="text-center mb-6">
           <div className="text-6xl mb-3 animate-bounce">🎰</div>
-          <h1 className="text-3xl font-bold text-fig mb-2">
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">
             Daily Raffle
           </h1>
-          <p className="text-forest font-medium">
+          <p className="text-gray-600 font-medium">
             Win big on Celo! 🚀
           </p>
           <div className="text-2xl mt-2">Day #{currentDayNumber} 📅</div>
         </div>
 
         {/* Celo Network Switch */}
-        <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-4 mb-4 border-2 border-prosperity-yellow shadow-lg">
+        <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-4 mb-4 border-2 border-yellow-400 shadow-lg">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-prosperity-yellow rounded-full"></div>
-              <span className="font-bold text-fig">Celo Network</span>
+              <div className="w-6 h-6 bg-yellow-400 rounded-full"></div>
+              <span className="font-bold text-gray-800">Celo Network</span>
             </div>
             <button
               onClick={switchToCelo}
-              className="bg-forest hover:bg-forest/80 text-white px-4 py-2 rounded-xl font-bold transition-all transform hover:scale-105"
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-bold transition-all transform hover:scale-105"
             >
               Switch 🔄
             </button>
@@ -474,15 +507,15 @@ export default function CeloRaffleApp() {
 
         {/* Wallet Connection */}
         {!account ? (
-          <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-6 text-center border-2 border-prosperity-yellow shadow-lg">
+          <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-6 text-center border-2 border-yellow-400 shadow-lg">
             <div className="text-4xl mb-4">👛</div>
-            <h2 className="text-xl font-bold text-fig mb-4">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">
               Connect to Play!
             </h2>
             <button
               onClick={connectWallet}
               disabled={isConnecting}
-              className={`bg-prosperity-yellow hover:bg-prosperity-yellow/80 text-fig font-bold py-3 px-6 rounded-xl transition-all transform hover:scale-105 disabled:opacity-50 ${
+              className={`bg-yellow-400 hover:bg-yellow-500 text-gray-800 font-bold py-3 px-6 rounded-xl transition-all transform hover:scale-105 disabled:opacity-50 ${
                 isAnimating ? 'animate-pulse' : ''
               }`}
             >
@@ -492,19 +525,19 @@ export default function CeloRaffleApp() {
         ) : (
           <div className="space-y-4">
             {/* Player Info */}
-            <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-4 border-2 border-jade shadow-lg">
+            <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-4 border-2 border-green-400 shadow-lg">
               <div className="flex justify-between items-center">
                 <div>
                   <div className="text-lg">🎮 Player</div>
-                  <p className="text-sm font-mono text-wood">
+                  <p className="text-sm font-mono text-gray-600">
                     {account.slice(0, 6)}...{account.slice(-4)}
                   </p>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm text-forest">Your Tickets</div>
-                  <div className="text-2xl font-bold text-fig">🎫 {userTickets}</div>
+                  <div className="text-sm text-green-600">Your Tickets</div>
+                  <div className="text-2xl font-bold text-gray-800">🎫 {userTickets}</div>
                   {raffleInfo && raffleInfo.totalTickets > 0 && (
-                    <div className="text-xs text-forest">
+                    <div className="text-xs text-green-600">
                       {getWinChance()}% win chance
                     </div>
                   )}
@@ -514,34 +547,34 @@ export default function CeloRaffleApp() {
 
             {/* Current Raffle Status */}
             {raffleInfo && (
-              <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-4 border-2 border-sky shadow-lg">
+              <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-4 border-2 border-blue-400 shadow-lg">
                 <div className="text-center">
-                  <div className="text-lg font-bold text-fig mb-2">
+                  <div className="text-lg font-bold text-gray-800 mb-2">
                     🏆 Raffle #{raffleInfo.raffleId}
                   </div>
                   <div className="grid grid-cols-2 gap-4 mb-3">
                     <div className="text-center">
-                      <div className="text-xs text-forest">Total Tickets</div>
-                      <div className="text-xl font-bold text-fig">
+                      <div className="text-xs text-green-600">Total Tickets</div>
+                      <div className="text-xl font-bold text-gray-800">
                         🎫 {raffleInfo.totalTickets}
                       </div>
                     </div>
                     <div className="text-center">
-                      <div className="text-xs text-forest">Prize Pool</div>
-                      <div className="text-xl font-bold text-fig">
+                      <div className="text-xs text-green-600">Prize Pool</div>
+                      <div className="text-xl font-bold text-gray-800">
                         💰 {formatEther(raffleInfo.prizePool)}
                       </div>
                     </div>
                   </div>
                   <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-bold ${
                     isRaffleActive 
-                      ? 'bg-success/20 text-success' 
-                      : 'bg-error/20 text-error'
+                      ? 'bg-green-100 text-green-600' 
+                      : 'bg-red-100 text-red-600'
                   }`}>
                     {isRaffleActive ? '🟢 LIVE' : '🔴 ENDED'}
                   </div>
                   {raffleInfo.endTime && (
-                    <div className="text-xs text-wood mt-1">
+                    <div className="text-xs text-gray-500 mt-1">
                       ⏰ Ends: {formatTime(raffleInfo.endTime)}
                     </div>
                   )}
@@ -550,18 +583,18 @@ export default function CeloRaffleApp() {
             )}
 
             {/* Create Daily Raffle */}
-            <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-4 border-2 border-citrus shadow-lg">
+            <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-4 border-2 border-orange-400 shadow-lg">
               <div className="text-center">
-                <div className="text-lg font-bold text-fig mb-2">
+                <div className="text-lg font-bold text-gray-800 mb-2">
                   🎪 Start New Raffle
                 </div>
-                <p className="text-sm text-forest mb-3">
+                <p className="text-sm text-green-600 mb-3">
                   Create today's raffle and be the first to play!
                 </p>
                 <button
                   onClick={createDailyRaffle}
                   disabled={isLoading}
-                  className={`w-full bg-citrus hover:bg-citrus/80 text-white font-bold py-3 px-4 rounded-xl transition-all transform hover:scale-105 disabled:opacity-50 ${
+                  className={`w-full bg-orange-400 hover:bg-orange-500 text-white font-bold py-3 px-4 rounded-xl transition-all transform hover:scale-105 disabled:opacity-50 ${
                     isAnimating ? 'animate-pulse' : ''
                   }`}
                 >
@@ -572,19 +605,19 @@ export default function CeloRaffleApp() {
 
             {/* Ticket Purchase */}
             {raffleInfo && isRaffleActive && (
-              <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-4 border-2 border-lotus shadow-lg">
-                <div className="text-lg font-bold text-fig mb-3 text-center">
+              <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-4 border-2 border-purple-400 shadow-lg">
+                <div className="text-lg font-bold text-gray-800 mb-3 text-center">
                   🎫 Buy Tickets
                 </div>
                 
                 {/* Purchase Method Toggle */}
-                <div className="flex mb-4 bg-sand rounded-xl p-1">
+                <div className="flex mb-4 bg-gray-100 rounded-xl p-1">
                   <button
                     onClick={() => setPurchaseMethod('tickets')}
                     className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition-all ${
                       purchaseMethod === 'tickets'
-                        ? 'bg-prosperity-yellow text-fig shadow-md'
-                        : 'text-wood hover:text-fig'
+                        ? 'bg-yellow-400 text-gray-800 shadow-md'
+                        : 'text-gray-600 hover:text-gray-800'
                     }`}
                   >
                     🎫 Count
@@ -593,8 +626,8 @@ export default function CeloRaffleApp() {
                     onClick={() => setPurchaseMethod('eth')}
                     className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition-all ${
                       purchaseMethod === 'eth'
-                        ? 'bg-prosperity-yellow text-fig shadow-md'
-                        : 'text-wood hover:text-fig'
+                        ? 'bg-yellow-400 text-gray-800 shadow-md'
+                        : 'text-gray-600 hover:text-gray-800'
                     }`}
                   >
                     💰 CELO
@@ -605,7 +638,7 @@ export default function CeloRaffleApp() {
                 {purchaseMethod === 'tickets' && (
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-forest mb-2 font-medium">
+                      <label className="block text-green-600 mb-2 font-medium">
                         Number of Tickets 🎫
                       </label>
                       <input
@@ -613,11 +646,11 @@ export default function CeloRaffleApp() {
                         min="1"
                         value={ticketAmount}
                         onChange={(e) => setTicketAmount(parseInt(e.target.value) || 1)}
-                        className="w-full bg-gypsum border-2 border-sand rounded-xl px-4 py-3 text-fig placeholder-wood focus:outline-none focus:border-prosperity-yellow transition-colors"
+                        className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-800 placeholder-gray-500 focus:outline-none focus:border-yellow-400 transition-colors"
                         placeholder="Enter tickets"
                       />
                       {raffleInfo.ticketPrice > 0n && (
-                        <p className="text-sm text-forest mt-2">
+                        <p className="text-sm text-green-600 mt-2">
                           💸 Total: {formatEther(BigInt(ticketAmount) * raffleInfo.ticketPrice)} CELO
                         </p>
                       )}
@@ -625,7 +658,7 @@ export default function CeloRaffleApp() {
                     <button
                       onClick={() => buyTickets(ticketAmount)}
                       disabled={isLoading || ticketAmount <= 0}
-                      className={`w-full bg-lotus hover:bg-lotus/80 text-white font-bold py-3 px-4 rounded-xl transition-all transform hover:scale-105 disabled:opacity-50 ${
+                      className={`w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-4 rounded-xl transition-all transform hover:scale-105 disabled:opacity-50 ${
                         isAnimating ? 'animate-pulse' : ''
                       }`}
                     >
@@ -638,7 +671,7 @@ export default function CeloRaffleApp() {
                 {purchaseMethod === 'eth' && (
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-forest mb-2 font-medium">
+                      <label className="block text-green-600 mb-2 font-medium">
                         CELO Amount 💰
                       </label>
                       <input
@@ -647,11 +680,11 @@ export default function CeloRaffleApp() {
                         min="0"
                         value={ethAmount}
                         onChange={(e) => setEthAmount(e.target.value)}
-                        className="w-full bg-gypsum border-2 border-sand rounded-xl px-4 py-3 text-fig placeholder-wood focus:outline-none focus:border-prosperity-yellow transition-colors"
+                        className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-800 placeholder-gray-500 focus:outline-none focus:border-yellow-400 transition-colors"
                         placeholder="Enter CELO"
                       />
                       {ethAmount && raffleInfo.ticketPrice > 0n && (
-                        <p className="text-sm text-forest mt-2">
+                        <p className="text-sm text-green-600 mt-2">
                           🎫 Tickets: {calculateTicketsFromEth()}
                         </p>
                       )}
@@ -659,7 +692,7 @@ export default function CeloRaffleApp() {
                     <button
                       onClick={buyTicketsWithEth}
                       disabled={isLoading || !ethAmount || parseFloat(ethAmount) <= 0}
-                      className={`w-full bg-lavender hover:bg-lavender/80 text-white font-bold py-3 px-4 rounded-xl transition-all transform hover:scale-105 disabled:opacity-50 ${
+                      className={`w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-4 rounded-xl transition-all transform hover:scale-105 disabled:opacity-50 ${
                         isAnimating ? 'animate-pulse' : ''
                       }`}
                     >
@@ -672,20 +705,20 @@ export default function CeloRaffleApp() {
 
             {/* Status Messages */}
             {error && (
-              <div className="bg-error/20 border-2 border-error rounded-xl p-3">
-                <p className="text-error font-medium text-center">❌ {error}</p>
+              <div className="bg-red-100 border-2 border-red-400 rounded-xl p-3">
+                <p className="text-red-600 font-medium text-center">❌ {error}</p>
               </div>
             )}
 
             {success && (
-              <div className="bg-success/20 border-2 border-success rounded-xl p-3">
-                <p className="text-success font-medium text-center">✅ {success}</p>
+              <div className="bg-green-100 border-2 border-green-400 rounded-xl p-3">
+                <p className="text-green-600 font-medium text-center">✅ {success}</p>
               </div>
             )}
 
             {txHash && (
-              <div className="bg-sky/20 border-2 border-sky rounded-xl p-3">
-                <p className="text-sky font-medium text-center text-sm">
+              <div className="bg-blue-100 border-2 border-blue-400 rounded-xl p-3">
+                <p className="text-blue-600 font-medium text-center text-sm">
                   🔗 Transaction: {txHash.slice(0, 8)}...{txHash.slice(-8)}
                 </p>
               </div>
@@ -693,8 +726,6 @@ export default function CeloRaffleApp() {
           </div>
         )}
       </div>
-
-      
     </div>
   );
 }
