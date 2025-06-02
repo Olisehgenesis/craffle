@@ -369,128 +369,51 @@ export default function CeloRaffleApp() {
    setIsSliding(true);
  };
 
- // Effects
+ // Debug environment on mount
  useEffect(() => {
-   if (publicClient) {
-     fetchRaffleInfo();
-   }
- }, [fetchRaffleInfo]);
+   console.log('🔍 App mounted, checking environment:', {
+     userAgent: navigator.userAgent,
+     location: window.location.href,
+     isFrame: window !== window.top,
+     hasParent: window.parent !== window
+   });
+ }, []);
 
- useEffect(() => {
-   if (raffleInfo && account) {
-     fetchUserTickets();
-   }
- }, [fetchUserTickets]);
-
- // Countdown timer effect
- useEffect(() => {
-   if (!raffleInfo || !raffleInfo.endTime) return;
-
-   const timer = setInterval(() => {
-     calculateTimeLeft(raffleInfo.endTime);
-   }, 1000);
-
-   // Calculate immediately
-   calculateTimeLeft(raffleInfo.endTime);
-
-   return () => clearInterval(timer);
- }, [raffleInfo, calculateTimeLeft]);
-
- // Slide to buy ticket effect
- useEffect(() => {
-   if (!isSliding) return;
-
-   const handleMouseMove = (e: MouseEvent) => {
-     const container = document.getElementById('slide-container');
-     if (!container) return;
-
-     const rect = container.getBoundingClientRect();
-     const x = e.clientX - rect.left;
-     const progress = Math.min(Math.max((x / rect.width) * 100, 0), 100);
-     setSlideProgress(progress);
-
-     if (progress >= 95) {
-       handleSlideComplete();
-     }
-   };
-
-   const handleTouchMove = (e: TouchEvent) => {
-     const container = document.getElementById('slide-container');
-     if (!container) return;
-
-     const rect = container.getBoundingClientRect();
-     const x = e.touches[0].clientX - rect.left;
-     const progress = Math.min(Math.max((x / rect.width) * 100, 0), 100);
-     setSlideProgress(progress);
-
-     if (progress >= 95) {
-       handleSlideComplete();
-     }
-   };
-
-   const handleMouseUp = () => {
-     setIsSliding(false);
-     if (slideProgress < 95) {
-       setSlideProgress(0);
-     }
-   };
-
-   document.addEventListener('mousemove', handleMouseMove);
-   document.addEventListener('mouseup', handleMouseUp);
-   document.addEventListener('touchmove', handleTouchMove);
-   document.addEventListener('touchend', handleMouseUp);
-
-   return () => {
-     document.removeEventListener('mousemove', handleMouseMove);
-     document.removeEventListener('mouseup', handleMouseUp);
-     document.removeEventListener('touchmove', handleTouchMove);
-     document.removeEventListener('touchend', handleMouseUp);
-   };
- }, [isSliding, slideProgress]);
-
- useEffect(() => {
-   if (!publicClient) return;
-
-   const interval = setInterval(() => {
-     fetchRaffleInfo();
-     if (account && raffleInfo) {
-       fetchUserTickets();
-     }
-   }, 30000);
-
-   return () => clearInterval(interval);
- }, [publicClient, account, raffleInfo, fetchRaffleInfo, fetchUserTickets]);
-
- // Initialize Farcaster Mini App
+ // Initialize Farcaster Mini App - COMPLETE FIXED VERSION
  useEffect(() => {
    const initializeFarcaster = async () => {
      try {
-       // Check if we're in a mini app context
-       const url = new URL(window.location.href);
-       const isMiniApp = url.searchParams.get('miniApp') === 'true' || 
-                        url.pathname.includes('/mini');
+       console.log('🚀 Initializing Farcaster Mini App...');
        
-       // Wait for initial data to load
-       if (publicClient) {
-         await fetchRaffleInfo();
-       }
-
-       // Set app as ready first to avoid jitter
+       // Set app ready immediately to prevent blank page
        setIsAppReady(true);
        
-       // Only call ready if we're in a mini app context
-       if (isMiniApp) {
-         // Disable native gestures to prevent accidental dismissal
+       // Try to call ready() regardless of context detection
+       // This is safer than trying to detect context
+       try {
          await sdk.actions.ready({ disableNativeGestures: true });
-         console.log('✅ Farcaster Mini App ready');
+         console.log('✅ Farcaster sdk.actions.ready() called successfully');
+       } catch (sdkError) {
+         console.log('ℹ️ SDK ready() failed (probably not in Farcaster):', sdkError);
+         // This is expected when not in Farcaster - just continue
        }
+       
+       // Load initial data
+       if (publicClient) {
+         console.log('📊 Fetching initial raffle data...');
+         await fetchRaffleInfo();
+       }
+       
+       console.log('🎯 App initialization complete');
+       
      } catch (error) {
-       console.error('Failed to initialize Farcaster Mini App:', error);
-       // Fallback - mark as ready anyway
+       console.error('❌ Error during initialization:', error);
+       // Always ensure app is marked as ready
        setIsAppReady(true);
      }
    };
 
+   // Start initialization immediately
    initializeFarcaster();
  }, [publicClient, fetchRaffleInfo]);
 
@@ -500,8 +423,7 @@ export default function CeloRaffleApp() {
      <div className="min-h-screen bg-gradient-to-br from-green-50 via-yellow-50 to-green-100 flex items-center justify-center">
        <div className="text-center">
          <div className="text-6xl mb-4 animate-spin">🎰</div>
-         <h2 className="text-2xl font-bold text-gray-800 mb-2">Loading Raffle...</h2>
-         <div className="animate-pulse text-gray-600">Preparing your game experience</div>
+         <h2 className="text-2xl font-bold text-gray-800 mb-2">Loading...</h2>
        </div>
      </div>
    );
