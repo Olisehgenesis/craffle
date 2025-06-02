@@ -465,15 +465,23 @@ export default function CeloRaffleApp() {
  useEffect(() => {
    const initializeFarcaster = async () => {
      try {
+       // Check if we're in a mini app context
+       const url = new URL(window.location.href);
+       const isMiniApp = url.searchParams.get('miniApp') === 'true' || 
+                        url.pathname.includes('/mini');
+       
        // Wait for initial data to load
        if (publicClient) {
          await fetchRaffleInfo();
        }
        
-       // Call ready when the app is fully loaded
-       await sdk.actions.ready();
+       // Only call ready if we're in a mini app context
+       if (isMiniApp) {
+         await sdk.actions.ready();
+         console.log('✅ Farcaster Mini App ready');
+       }
+       
        setIsAppReady(true);
-       console.log('✅ Farcaster Mini App ready');
      } catch (error) {
        console.error('Failed to initialize Farcaster Mini App:', error);
        // Fallback - mark as ready anyway
