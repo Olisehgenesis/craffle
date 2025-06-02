@@ -5,6 +5,7 @@ import { celo } from 'viem/chains';
 import { useSwitchChain } from 'wagmi';
 import { getDataSuffix, submitReferral } from '@divvi/referral-sdk';
 import { Interface } from 'ethers';
+import { sdk } from '@farcaster/frame-sdk';
 
 // Mock ABI - replace with your actual raffle ABI
 const raffleABI = [
@@ -73,13 +74,13 @@ const raffleABI = [
 const RAFFLE_CONTRACT_ADDRESS = '0x492CC1634AA2E8Ba909F2a61d886ef6c8C651074';
 
 // Centralized Divvi configuration
-const DIVVI_CONFIG = {
-  consumer: '0x53eaF4CD171842d8144e45211308e5D90B4b0088' as `0x${string}`,
+const DIVVI_CONFIG: { consumer: `0x${string}`; providers: `0x${string}`[] } = {
+  consumer: '0x53eaF4CD171842d8144e45211308e5D90B4b0088',
   providers: [
     '0x0423189886d7966f0dd7e7d256898daeee625dca',
     '0xc95876688026be9d6fa7a7c33328bd013effa2bb', 
     '0x5f0a55fad9424ac99429f635dfb9bf20c3360ab8'
-  ] as `0x${string}`[]
+  ]
 };
 
 // Custom hook for Divvi-enabled transactions
@@ -169,6 +170,7 @@ export default function CeloRaffleApp() {
   const [ethAmount, setEthAmount] = useState('');
   const [purchaseMethod, setPurchaseMethod] = useState('tickets');
   const [isLoading, setIsLoading] = useState(false);
+  const [isAppReady, setIsAppReady] = useState(false);
   
   // Raffle state
   const [raffleInfo, setRaffleInfo] = useState<{
@@ -445,6 +447,42 @@ export default function CeloRaffleApp() {
 
     return () => clearInterval(interval);
   }, [publicClient, account, raffleInfo, fetchRaffleInfo, fetchUserTickets]);
+
+  // Initialize Farcaster Mini App
+  useEffect(() => {
+    const initializeFarcaster = async () => {
+      try {
+        // Wait for initial data to load
+        if (publicClient) {
+          await fetchRaffleInfo();
+        }
+        
+        // Call ready when the app is fully loaded
+        await sdk.actions.ready();
+        setIsAppReady(true);
+        console.log('✅ Farcaster Mini App ready');
+      } catch (error) {
+        console.error('Failed to initialize Farcaster Mini App:', error);
+        // Fallback - mark as ready anyway
+        setIsAppReady(true);
+      }
+    };
+
+    initializeFarcaster();
+  }, [publicClient, fetchRaffleInfo]);
+
+  // Show loading state until app is ready
+  if (!isAppReady) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 via-yellow-50 to-green-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4 animate-spin">🎰</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Loading Raffle...</h2>
+          <div className="animate-pulse text-gray-600">Preparing your game experience</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-yellow-50 to-green-100 p-4 relative overflow-hidden">
