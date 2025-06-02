@@ -137,6 +137,8 @@ export default function CeloRaffleApp() {
  const [isSliding, setIsSliding] = useState(false);
  const [slideProgress, setSlideProgress] = useState(0);
 
+ console.log(isSliding);
+
  // Utility functions
  const showSuccess = useCallback((message: string, shouldReload = false) => {
    setSuccess(message);
@@ -416,6 +418,86 @@ export default function CeloRaffleApp() {
    // Start initialization immediately
    initializeFarcaster();
  }, [publicClient, fetchRaffleInfo]);
+
+ // Add back the countdown timer effect
+ useEffect(() => {
+   if (!raffleInfo || !raffleInfo.endTime) return;
+
+   const timer = setInterval(() => {
+     calculateTimeLeft(raffleInfo.endTime);
+   }, 1000);
+
+   // Calculate immediately
+   calculateTimeLeft(raffleInfo.endTime);
+
+   return () => clearInterval(timer);
+ }, [raffleInfo, calculateTimeLeft]);
+
+ // Add back the slide to buy ticket effect
+ useEffect(() => {
+   if (!isSliding) return;
+
+   const handleMouseMove = (e: MouseEvent) => {
+     const container = document.getElementById('slide-container');
+     if (!container) return;
+
+     const rect = container.getBoundingClientRect();
+     const x = e.clientX - rect.left;
+     const progress = Math.min(Math.max((x / rect.width) * 100, 0), 100);
+     setSlideProgress(progress);
+
+     if (progress >= 95) {
+       handleSlideComplete();
+     }
+   };
+
+   const handleTouchMove = (e: TouchEvent) => {
+     const container = document.getElementById('slide-container');
+     if (!container) return;
+
+     const rect = container.getBoundingClientRect();
+     const x = e.touches[0].clientX - rect.left;
+     const progress = Math.min(Math.max((x / rect.width) * 100, 0), 100);
+     setSlideProgress(progress);
+
+     if (progress >= 95) {
+       handleSlideComplete();
+     }
+   };
+
+   const handleMouseUp = () => {
+     setIsSliding(false);
+     if (slideProgress < 95) {
+       setSlideProgress(0);
+     }
+   };
+
+   document.addEventListener('mousemove', handleMouseMove);
+   document.addEventListener('mouseup', handleMouseUp);
+   document.addEventListener('touchmove', handleTouchMove);
+   document.addEventListener('touchend', handleMouseUp);
+
+   return () => {
+     document.removeEventListener('mousemove', handleMouseMove);
+     document.removeEventListener('mouseup', handleMouseUp);
+     document.removeEventListener('touchmove', handleTouchMove);
+     document.removeEventListener('touchend', handleMouseUp);
+   };
+ }, [isSliding, slideProgress]);
+
+ // Add back the data refresh interval
+ useEffect(() => {
+   if (!publicClient) return;
+
+   const interval = setInterval(() => {
+     fetchRaffleInfo();
+     if (account && raffleInfo) {
+       fetchUserTickets();
+     }
+   }, 30000);
+
+   return () => clearInterval(interval);
+ }, [publicClient, account, raffleInfo, fetchRaffleInfo, fetchUserTickets]);
 
  // Show loading state until app is ready
  if (!isAppReady) {
