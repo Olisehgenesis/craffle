@@ -74,13 +74,13 @@ const raffleABI = [
 const RAFFLE_CONTRACT_ADDRESS = '0x492CC1634AA2E8Ba909F2a61d886ef6c8C651074';
 
 // Centralized Divvi configuration
-const DIVVI_CONFIG: { consumer: `0x${string}`; providers: `0x${string}`[] } = {
-  consumer: '0x53eaF4CD171842d8144e45211308e5D90B4b0088',
+const DIVVI_CONFIG = {
+  consumer: '0x53eaF4CD171842d8144e45211308e5D90B4b0088' as `0x${string}`,
   providers: [
     '0x0423189886d7966f0dd7e7d256898daeee625dca',
     '0xc95876688026be9d6fa7a7c33328bd013effa2bb', 
     '0x5f0a55fad9424ac99429f635dfb9bf20c3360ab8'
-  ]
+  ] as `0x${string}`[]
 };
 
 // Custom hook for Divvi-enabled transactions
@@ -192,18 +192,59 @@ export default function CeloRaffleApp() {
   const [success, setSuccess] = useState('');
   const [isAnimating, setIsAnimating] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [countdown, setCountdown] = useState('');
+  const [timeLeft, setTimeLeft] = useState({
+    days: 0,
+    hours: 0,
+    minutes: 0,
+    seconds: 0
+  });
 
   // Utility functions
-  const showSuccess = useCallback((message: string) => {
+  const showSuccess = useCallback((message: string, shouldReload = false) => {
     setSuccess(message);
     setShowConfetti(true);
     setTimeout(() => setShowConfetti(false), 3000);
+    
+    // Reload app after ticket purchases for fresh data
+    if (shouldReload) {
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+    }
   }, []);
 
   const resetMessages = useCallback(() => {
     setError('');
     setSuccess('');
     setTxHash('');
+  }, []);
+
+  // Countdown calculation
+  const calculateTimeLeft = useCallback((endTime: Date) => {
+    const now = new Date().getTime();
+    const endTimestamp = endTime.getTime();
+    const difference = endTimestamp - now;
+
+    if (difference > 0) {
+      const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((difference % (1000 * 60)) / 1000);
+
+      setTimeLeft({ days, hours, minutes, seconds });
+      
+      if (days > 0) {
+        setCountdown(`${days}d ${hours}h ${minutes}m`);
+      } else if (hours > 0) {
+        setCountdown(`${hours}h ${minutes}m ${seconds}s`);
+      } else {
+        setCountdown(`${minutes}m ${seconds}s`);
+      }
+    } else {
+      setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+      setCountdown('Ended');
+    }
   }, []);
 
   // Switch to Celo network
@@ -344,7 +385,7 @@ export default function CeloRaffleApp() {
         args: [quantity],
         onSuccess: (txHash) => {
           setTxHash(txHash);
-          showSuccess('🎊 Tickets purchased successfully!');
+          showSuccess('🎊 Tickets purchased successfully!', true); // Reload after ticket purchase
           fetchRaffleInfo();
           fetchUserTickets();
         },
@@ -385,7 +426,7 @@ export default function CeloRaffleApp() {
         value: ethValue,
         onSuccess: (txHash) => {
           setTxHash(txHash);
-          showSuccess(`🎊 Successfully bought tickets with ${ethAmount} CELO!`);
+          showSuccess(`🎊 Successfully bought tickets with ${ethAmount} CELO!`, true); // Reload after ticket purchase
           setEthAmount('');
           fetchRaffleInfo();
           fetchUserTickets();
@@ -434,6 +475,20 @@ export default function CeloRaffleApp() {
       fetchUserTickets();
     }
   }, [fetchUserTickets]);
+
+  // Countdown timer effect
+  useEffect(() => {
+    if (!raffleInfo || !raffleInfo.endTime) return;
+
+    const timer = setInterval(() => {
+      calculateTimeLeft(raffleInfo.endTime);
+    }, 1000);
+
+    // Calculate immediately
+    calculateTimeLeft(raffleInfo.endTime);
+
+    return () => clearInterval(timer);
+  }, [raffleInfo, calculateTimeLeft]);
 
   useEffect(() => {
     if (!publicClient) return;
@@ -585,61 +640,106 @@ export default function CeloRaffleApp() {
 
             {/* Current Raffle Status */}
             {raffleInfo && (
-              <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-4 border-2 border-blue-400 shadow-lg">
-                <div className="text-center">
-                  <div className="text-lg font-bold text-gray-800 mb-2">
-                    🏆 Raffle #{raffleInfo.raffleId}
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 mb-3">
-                    <div className="text-center">
-                      <div className="text-xs text-green-600">Total Tickets</div>
+              <div className="bg-white/90 backdrop-blur-lg rounded-3xl p-6 border-2 border-blue-400 shadow-xl relative overflow-hidden">
+                {/* Background gradient decoration */}
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-purple-50 opacity-50"></div>
+                <div className="relative z-10">
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-2 mb-4">
+                      <div className="text-2xl animate-pulse">🏆</div>
                       <div className="text-xl font-bold text-gray-800">
-                        🎫 {raffleInfo.totalTickets}
+                        Raffle #{raffleInfo.raffleId}
+                      </div>
+                      <div className="text-2xl animate-pulse">🏆</div>
+                    </div>
+                    
+                    {/* Status Badge */}
+                    <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold mb-4 shadow-lg ${
+                      isRaffleActive 
+                        ? 'bg-gradient-to-r from-green-400 to-green-500 text-white animate-pulse' 
+                        : 'bg-gradient-to-r from-red-400 to-red-500 text-white'
+                    }`}>
+                      {isRaffleActive ? '🟢 LIVE NOW!' : '🔴 ENDED'}
+                    </div>
+
+                    {/* Countdown Timer */}
+                    {isRaffleActive && raffleInfo.endTime && (
+                      <div className="mb-4 p-3 bg-gradient-to-r from-orange-100 to-yellow-100 rounded-2xl border border-orange-200">
+                        <div className="text-sm text-orange-600 font-medium mb-1">⏰ Time Remaining</div>
+                        <div className="text-2xl font-bold text-orange-800 font-mono tracking-wider">
+                          {countdown}
+                        </div>
+                        {timeLeft.days === 0 && timeLeft.hours === 0 && timeLeft.minutes < 30 && (
+                          <div className="text-xs text-red-600 mt-1 animate-pulse">
+                            🚨 Hurry! Raffle ending soon!
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div className="bg-gradient-to-br from-blue-100 to-blue-200 p-4 rounded-2xl border border-blue-300">
+                        <div className="text-xs text-blue-600 font-medium">Total Tickets</div>
+                        <div className="text-2xl font-bold text-blue-800 flex items-center justify-center gap-1">
+                          🎫 {raffleInfo.totalTickets.toLocaleString()}
+                        </div>
+                        <div className="text-xs text-blue-500 mt-1">
+                          {raffleInfo.totalTickets > 100 ? 'High Competition!' : 'Good Odds!'}
+                        </div>
+                      </div>
+                      <div className="bg-gradient-to-br from-green-100 to-green-200 p-4 rounded-2xl border border-green-300">
+                        <div className="text-xs text-green-600 font-medium">Prize Pool</div>
+                        <div className="text-2xl font-bold text-green-800 flex items-center justify-center gap-1">
+                          💰 {parseFloat(formatEther(raffleInfo.prizePool)).toFixed(2)}
+                        </div>
+                        <div className="text-xs text-green-500 mt-1">CELO</div>
                       </div>
                     </div>
-                    <div className="text-center">
-                      <div className="text-xs text-green-600">Prize Pool</div>
-                      <div className="text-xl font-bold text-gray-800">
-                        💰 {formatEther(raffleInfo.prizePool)}
+
+                    {/* Ticket Price */}
+                    {raffleInfo.ticketPrice > 0n && (
+                      <div className="bg-gradient-to-r from-purple-100 to-pink-100 p-3 rounded-xl border border-purple-200 mb-3">
+                        <div className="text-sm text-purple-600 font-medium">🎫 Ticket Price</div>
+                        <div className="text-lg font-bold text-purple-800">
+                          {parseFloat(formatEther(raffleInfo.ticketPrice)).toFixed(4)} CELO
+                        </div>
                       </div>
-                    </div>
+                    )}
+
+                    {/* End Time */}
+                    {raffleInfo.endTime && (
+                      <div className="text-xs text-gray-500 bg-gray-100 rounded-lg p-2">
+                        🗓️ Ends: {formatTime(raffleInfo.endTime)}
+                      </div>
+                    )}
                   </div>
-                  <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-bold ${
-                    isRaffleActive 
-                      ? 'bg-green-100 text-green-600' 
-                      : 'bg-red-100 text-red-600'
-                  }`}>
-                    {isRaffleActive ? '🟢 LIVE' : '🔴 ENDED'}
-                  </div>
-                  {raffleInfo.endTime && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      ⏰ Ends: {formatTime(raffleInfo.endTime)}
-                    </div>
-                  )}
                 </div>
               </div>
             )}
 
-            {/* Create Daily Raffle */}
-            <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-4 border-2 border-orange-400 shadow-lg">
-              <div className="text-center">
-                <div className="text-lg font-bold text-gray-800 mb-2">
-                  🎪 Start New Raffle
+            {/* Create Daily Raffle - Only show if no active raffle */}
+            {!isRaffleActive && (
+              <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-4 border-2 border-orange-400 shadow-lg">
+                <div className="text-center">
+                  <div className="text-lg font-bold text-gray-800 mb-2">
+                    🎪 Start New Raffle
+                  </div>
+                  <p className="text-sm text-green-600 mb-3">
+                    Create today's raffle and be the first to play!
+                  </p>
+                  <button
+                    onClick={createDailyRaffle}
+                    disabled={isLoading}
+                    className={`w-full bg-orange-400 hover:bg-orange-500 text-white font-bold py-3 px-4 rounded-xl transition-all transform hover:scale-105 disabled:opacity-50 ${
+                      isAnimating ? 'animate-pulse' : ''
+                    }`}
+                  >
+                    {isLoading ? 'Creating... 🎨' : 'Create Raffle 🚀'}
+                  </button>
                 </div>
-                <p className="text-sm text-green-600 mb-3">
-                  Create today's raffle and be the first to play!
-                </p>
-                <button
-                  onClick={createDailyRaffle}
-                  disabled={isLoading}
-                  className={`w-full bg-orange-400 hover:bg-orange-500 text-white font-bold py-3 px-4 rounded-xl transition-all transform hover:scale-105 disabled:opacity-50 ${
-                    isAnimating ? 'animate-pulse' : ''
-                  }`}
-                >
-                  {isLoading ? 'Creating... 🎨' : 'Create Raffle 🚀'}
-                </button>
               </div>
-            </div>
+            )}
 
             {/* Ticket Purchase */}
             {raffleInfo && isRaffleActive && (
