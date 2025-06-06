@@ -1,9 +1,4 @@
 {
-  "accountAssociation": {
-  "header": "eyJmaWQiOjQyMDU2NCwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweGREOGVFNTU1NTc0NGQ2ODQyZTNjNTcyZTQ2RjQyMDkyZWQ3MzI2YjYifQ",
-  "payload": "eyJkb21haW4iOiJsb2NhbGhvc3QifQ",
-  "signature": "MHgwOWUwZjA3OGJhOTA4NzUxZTU2MjJlNTc3MGFkNWMzNDE0YmIxN2MwZGUwMGE2ODAyNGM1ZDczYjA4NTk1MjIwNDQyZDE1ODNlYTZjNzYxZWQ3ZmExZDEyNDg4YTRlYWQzNThhNjIyY2JlNWJiOTA3NGM5ZjFhOTQ3N2NhZjg3ZTFi"
-},
   "frame": {
     "version": "1",
     "name": "Celo Daily Raffle",
@@ -24,16 +19,15 @@
     ],
     "heroImageUrl": "https://craffle.vercel.app/logo.png",
     "tagline": "Daily prizes await you!",
-    "ogTitle": "Daily Raffle - Win Big Every Day",
-    "ogDescription": "Join daily raffles on Celo blockchain. Buy tickets, win prizes, and have fun with our transparent smart contract system.",
-    "ogImageUrl": "craffle.vercel.app/logo.png",
+    "ogTitle": "Daily Raffle - Win Big Daily",
+    "ogDescription": "Join daily raffles on Celo blockchain. Buy tickets, win prizes with smart contracts.",
+    "ogImageUrl": "https://craffle.vercel.app/logo.png",
     "requiredChains": [
       "eip155:42220"
     ],
     "requiredCapabilities": [
       "actions.ready",
-      "wallet.getEvmProvider",
-      "wallet.sendTransaction"
+      "wallet.getEthereumProvider"
     ],
     "noindex": false
   }
