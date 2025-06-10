@@ -21,9 +21,7 @@ import {
   ArrowRight,
   CheckCircle,
   XCircle,
-  Circle,
-  Globe,
-  Ship,
+ 
 } from 'lucide-react';
 import CraffleSlotsModal from './components/SlotsGame';
 

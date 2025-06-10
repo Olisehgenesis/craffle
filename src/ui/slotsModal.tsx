@@ -72,14 +72,6 @@ const CraffleSlotsModal = ({ isOpen, onClose }: CraffleSlotsModalProps) => {
     return 0;
   };
 
-  // Create reel strip with multiple symbols
-  const createReelStrip = () => {
-    const strip = [];
-    for (let i = 0; i < 20; i++) {
-      strip.push(getRandomToken());
-    }
-    return strip;
-  };
 
   // Animate individual reel
   const animateReel = (reelIndex: number, finalSymbol: number, duration: number) => {
@@ -182,6 +174,7 @@ const CraffleSlotsModal = ({ isOpen, onClose }: CraffleSlotsModalProps) => {
 
   // Render reel strip
   const renderReelStrip = (reelIndex: number) => {
+    console.log('reelIndex', reelIndex);
     const strip = [];
     // Create a long strip for smooth animation
     for (let i = 0; i < 30; i++) {
